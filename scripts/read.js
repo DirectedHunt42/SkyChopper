@@ -43,6 +43,10 @@ if (!fs.existsSync(statusFile)) {
 // State memory for hysteresis
 let systemOn = defaultStatus.system_on;
 let useSource = defaultStatus.use_source;
+let battV = defaultStatus.batt_voltage;
+let sourceV = defaultStatus.source_voltage;
+let buckV = defaultStatus.buck_voltage;
+let sourcePresent = true;
 
 function clamp(x, a, b) {
     return Math.max(a, Math.min(b, x));
@@ -58,9 +62,26 @@ function generateData() {
     const offPercent = settings.off_percent;
     const targetBuck = settings.target_buck_voltage;
 
-    // Fake voltages
-    const battV = 10.8 + Math.random() * 2;
-    const sourceV = Math.random() < 0.2 ? 0 : 10 + Math.random() * 6;
+    // Occasionally toggle source presence for realism
+    if (Math.random() < 0.02) {
+        sourcePresent = !sourcePresent;
+    }
+
+    // Source voltage around 9V with slight noise, sometimes off or slightly out of range
+    if (!sourcePresent) {
+        sourceV = 0;
+    } else {
+        const drift = (Math.random() - 0.5) * 0.08;
+        sourceV = clamp(sourceV + drift, 8.2, 9.8);
+        if (Math.random() < 0.05) {
+            sourceV = clamp(sourceV + (Math.random() - 0.5) * 1.2, 7.8, 10.2);
+        }
+    }
+
+    // Battery voltage drift based on load/source
+    const dischargeRate = systemOn && !useSource ? -0.015 : -0.003;
+    const chargeRate = useSource ? 0.01 : 0.0;
+    battV = clamp(battV + dischargeRate + chargeRate + (Math.random() - 0.5) * 0.01, emptyV, fullV);
 
     // Calculate battery %
     let percent = ((battV - emptyV) / (fullV - emptyV)) * 100;
@@ -77,7 +98,9 @@ function generateData() {
         useSource = systemOn;
     }
 
-    const buckV = targetBuck;
+    // Buck voltage around target with gentle noise
+    const buckNoise = (Math.random() - 0.5) * 0.08;
+    buckV = clamp(buckV + (targetBuck - buckV) * 0.2 + buckNoise, targetBuck - 0.4, targetBuck + 0.4);
 
     const data = {
         batt_voltage: battV,
@@ -86,6 +109,10 @@ function generateData() {
         batt_percent: percent,
         use_source: useSource,
         system_on: systemOn,
+        batt_start_v: 11.5,
+        batt_stop_v: 10.8,
+        source_expected_min_v: 8.5,
+        source_expected_max_v: 9.5,
         time: Date.now()
     };
 

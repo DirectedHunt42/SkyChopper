@@ -1,7 +1,6 @@
 const canvas = document.getElementById('monitorCanvas');
 const ctx = canvas.getContext('2d');
 const turbine = document.getElementById('turbine');
-const statusSystem = document.getElementById('status-system');
 const statusSource = document.getElementById('status-source');
 const statusBattery = document.getElementById('status-battery');
 
@@ -47,6 +46,13 @@ const palette = prefersLight
         danger: "#ef4444",
         outline: "#1f2937"
     };
+
+const thresholds = {
+    battStartV: 11.5,
+    battStopV: 10.8,
+    sourceExpectedMinV: 8.5,
+    sourceExpectedMaxV: 9.5
+};
 
 function normalizeStatus(raw) {
     const d = raw && typeof raw === "object" ? raw : {};
@@ -112,16 +118,37 @@ async function updateData() {
         targetStatus = normalizeStatus(d);
         availableKeys = new Set(Object.keys(d || {}));
 
-        if (statusSystem) {
-            statusSystem.className = "status-dot" + (d.system_on ? " on" : "");
-        }
         if (statusSource) {
-            statusSource.className = "status-dot" + (d.use_source ? " on" : "");
+            const srcV = Number.isFinite(d.source_voltage) ? d.source_voltage : status.source_voltage;
+            const expMin = Number.isFinite(d.source_expected_min_v) ? d.source_expected_min_v : thresholds.sourceExpectedMinV;
+            const expMax = Number.isFinite(d.source_expected_max_v) ? d.source_expected_max_v : thresholds.sourceExpectedMaxV;
+            let level = " danger";
+            if (Number.isFinite(srcV) && srcV > 0.1) {
+                level = (srcV >= expMin && srcV <= expMax) ? " on" : " warn";
+            }
+            statusSource.className = "status-dot" + level;
+            const sourceTip = `Source ${srcV.toFixed(2)} V (target ${expMin.toFixed(1)}–${expMax.toFixed(1)} V)`;
+            const sourceItem = statusSource.closest(".status-item");
+            if (sourceItem) {
+                sourceItem.setAttribute("data-tooltip", sourceTip);
+                sourceItem.setAttribute("aria-label", sourceTip);
+            }
         }
         if (statusBattery) {
-            const pct = Number.isFinite(d.batt_percent) ? d.batt_percent : status.batt_percent;
-            const level = pct > 25 ? " on" : pct > 15 ? " warn" : " danger";
+            const battV = Number.isFinite(d.batt_voltage) ? d.batt_voltage : status.batt_voltage;
+            const startV = Number.isFinite(d.batt_start_v) ? d.batt_start_v : thresholds.battStartV;
+            const stopV = Number.isFinite(d.batt_stop_v) ? d.batt_stop_v : thresholds.battStopV;
+            let level = " danger";
+            if (Number.isFinite(battV)) {
+                level = battV >= startV ? " on" : battV >= stopV ? " warn" : " danger";
+            }
             statusBattery.className = "status-dot" + level;
+            const battTip = `Battery ${battV.toFixed(2)} V (start ${startV.toFixed(1)} V, stop ${stopV.toFixed(1)} V)`;
+            const battItem = statusBattery.closest(".status-item");
+            if (battItem) {
+                battItem.setAttribute("data-tooltip", battTip);
+                battItem.setAttribute("aria-label", battTip);
+            }
         }
     } catch (err) {
         // keep previous status if fetch fails
