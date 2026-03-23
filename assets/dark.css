@@ -1,0 +1,71 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap");
+
+:root {
+    --bg: #0b1020;
+    --bg-2: #0f172a;
+    --ink: #e2e8f0;
+    --muted: #94a3b8;
+    --panel: #0f172a;
+    --panel-border: #1f2937;
+    --shadow: 0 24px 60px rgba(2, 6, 23, 0.6);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+        radial-gradient(1200px 520px at 15% -20%, rgba(56, 189, 248, 0.18) 0%, rgba(56,189,248,0) 60%),
+        radial-gradient(900px 500px at 90% 0%, rgba(99, 102, 241, 0.18) 0%, rgba(99,102,241,0) 60%),
+        linear-gradient(180deg, var(--bg), var(--bg-2));
+    min-height: 100vh;
+}
+
+.page {
+    max-width: 980px;
+    margin: 48px auto 64px;
+    padding: 0 24px;
+}
+
+.hero {
+    text-align: left;
+    margin-bottom: 22px;
+}
+
+.eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+h1 {
+    margin: 0 0 6px 0;
+    font-size: 32px;
+    font-weight: 600;
+}
+
+.sub {
+    color: var(--muted);
+    font-size: 15px;
+}
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 20px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 14px;
+}

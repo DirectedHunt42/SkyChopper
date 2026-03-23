@@ -1,22 +1,36 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <title>Wind Turbine Monitor</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkyChopper Wind Dashboard</title>
+
+<!-- Favicon -->
+<link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+
+<!-- Load dark/light CSS -->
+<link id="theme-css" rel="stylesheet" href="assets/dark.css">
+<script>
+    const themeLink = document.getElementById('theme-css');
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        themeLink.href = 'assets/light.css';
+    }
+</script>
 </head>
 
 <body>
-
-<h1>Wind Power System</h1>
-
-<div class="panel">
-    <p>Battery voltage: <span id="bat">0</span> V</p>
-    <p>Generator voltage: <span id="gen">0</span> V</p>
-    <p>Charge current: <span id="cur">0</span> A</p>
+<div class="page">
+    <header class="hero">
+        <div class="eyebrow">Live telemetry</div>
+        <h1>SkyChopper Wind Dashboard</h1>
+        <div class="sub">Power state, battery health, and turbine status in real time</div>
+    </header>
+    <div class="panel">
+        <canvas id="monitorCanvas" width="760" height="520"></canvas>
+    </div>
 </div>
 
-<script src="script.js"></script>
-
+<script src="scripts/write.js"></script>
 </body>
 </html>
