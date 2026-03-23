@@ -14,7 +14,10 @@ const defaultStatus = {
 };
 
 let status = { ...defaultStatus };
+let targetStatus = { ...defaultStatus };
 let availableKeys = new Set();
+let dpr = window.devicePixelRatio || 1;
+let lastFrame = performance.now();
 
 const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
 const palette = prefersLight
@@ -58,6 +61,22 @@ function normalizeStatus(raw) {
     };
 }
 
+function stepStatus(dt) {
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const t = Math.min(1, dt / 250);
+
+    status = {
+        ...status,
+        ...targetStatus,
+        batt_voltage: lerp(status.batt_voltage, targetStatus.batt_voltage, t),
+        source_voltage: lerp(status.source_voltage, targetStatus.source_voltage, t),
+        buck_voltage: lerp(status.buck_voltage, targetStatus.buck_voltage, t),
+        batt_percent: lerp(status.batt_percent, targetStatus.batt_percent, t),
+        rpm: lerp(status.rpm, targetStatus.rpm, t),
+        current: lerp(status.current, targetStatus.current, t)
+    };
+}
+
 function roundRect(x, y, w, h, r) {
     const radius = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -73,12 +92,20 @@ function roundRect(x, y, w, h, r) {
     ctx.closePath();
 }
 
+function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
 // Fetch JSON
 async function updateData() {
     try {
         const res = await fetch("data/status.json", { cache: "no-store" });
         const d = await res.json();
-        status = normalizeStatus(d);
+        targetStatus = normalizeStatus(d);
         availableKeys = new Set(Object.keys(d || {}));
     } catch (err) {
         // keep previous status if fetch fails
@@ -87,49 +114,22 @@ async function updateData() {
 
 // Draw dashboard
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const width = canvas.width / dpr;
+    const height = canvas.height / dpr;
+
+    ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = palette.bg;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, width, height);
 
-    const centerX = canvas.width / 2;
-    const centerY = 210;
-
-    // Draw battery arc
-    const radius = 60;
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    ctx.strokeStyle = status.batt_percent > 20 ? palette.good : palette.danger; // red if low
-    ctx.arc(centerX, centerY, radius, -Math.PI/2, -Math.PI/2 + 2*Math.PI*status.batt_percent/100);
-    ctx.stroke();
-
-    // Draw turbine hub
-    ctx.fillStyle = palette.accent;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Draw spinning blades (speed ~ RPM)
-    const time = Date.now() / 1000;
-    const numBlades = 3;
-    for (let i = 0; i < numBlades; i++) {
-        const angle = time * 2 * Math.PI * (status.rpm / 60) + i * 2 * Math.PI / numBlades;
-        const length = 60;
-        const x = centerX + length * Math.cos(angle);
-        const y = centerY + length * Math.sin(angle);
-        ctx.strokeStyle = palette.accent;
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-    }
+    const isNarrow = width < 520;
+    const pad = isNarrow ? 16 : 24;
+    const gap = isNarrow ? 10 : 14;
+    const cardH = isNarrow ? 58 : 64;
 
     // Data blocks
     const blocks = [];
     if (availableKeys.has("batt_voltage") || availableKeys.has("batt_percent")) {
         blocks.push({
-            x: 50,
-            y: 60,
             label: "Battery",
             value: `${status.batt_voltage.toFixed(2)} V\n${status.batt_percent.toFixed(1)} %`,
             safe: status.batt_percent > 20
@@ -137,8 +137,6 @@ function draw() {
     }
     if (availableKeys.has("source_voltage")) {
         blocks.push({
-            x: 550,
-            y: 60,
             label: "Source",
             value: `${status.source_voltage.toFixed(2)} V`,
             safe: status.source_voltage > 10
@@ -146,8 +144,6 @@ function draw() {
     }
     if (availableKeys.has("buck_voltage")) {
         blocks.push({
-            x: 50,
-            y: 360,
             label: "Buck Output",
             value: `${status.buck_voltage.toFixed(2)} V`,
             safe: status.buck_voltage > 8
@@ -155,8 +151,6 @@ function draw() {
     }
     if (availableKeys.has("use_source") || availableKeys.has("system_on")) {
         blocks.push({
-            x: 550,
-            y: 360,
             label: "Power Mode",
             value: `${status.use_source ? "SOURCE" : "BATTERY"}\n${status.system_on ? "ON" : "OFF"}`,
             safe: true
@@ -164,8 +158,6 @@ function draw() {
     }
     if (availableKeys.has("rpm")) {
         blocks.push({
-            x: 250,
-            y: 60,
             label: "RPM",
             value: `${Math.round(status.rpm)}`,
             safe: true
@@ -173,8 +165,6 @@ function draw() {
     }
     if (availableKeys.has("current")) {
         blocks.push({
-            x: 250,
-            y: 360,
             label: "Current",
             value: `${status.current.toFixed(2)} A`,
             safe: status.current < 10
@@ -182,43 +172,143 @@ function draw() {
     }
     if (availableKeys.has("dump_load")) {
         blocks.push({
-            x: 350,
-            y: 420,
             label: "Dump Load",
             value: `${status.dump_load ? "ON" : "OFF"}`,
             safe: !status.dump_load
         });
     }
 
+    let centerX = width / 2;
+    let centerY = height * (isNarrow ? 0.28 : 0.45);
+
+    // Layout cards and adjust turbine center to avoid overlap
+    const positions = [];
+    if (blocks.length > 0) {
+        if (isNarrow) {
+            const cols = 2;
+            const cardW = Math.min(160, Math.floor((width - pad * 2 - gap) / cols));
+            const rows = Math.ceil(blocks.length / cols);
+            const totalH = rows * cardH + (rows - 1) * gap;
+            let startY = Math.max(height * 0.45, height - totalH - pad);
+            if (startY + totalH + pad > height) {
+                startY = height - totalH - pad;
+            }
+            startY = Math.max(startY, pad);
+            const totalW = cols * cardW + (cols - 1) * gap;
+            const startX = (width - totalW) / 2;
+            for (let i = 0; i < blocks.length; i++) {
+                const row = Math.floor(i / cols);
+                const col = i % cols;
+                positions.push({
+                    ...blocks[i],
+                    x: startX + col * (cardW + gap),
+                    y: startY + row * (cardH + gap),
+                    w: cardW,
+                    h: cardH
+                });
+            }
+            const topOfCards = startY - 50;
+            centerY = Math.max(120, Math.min(height * 0.28, topOfCards));
+        } else {
+            const topCount = Math.ceil(blocks.length / 2);
+            const bottomCount = blocks.length - topCount;
+
+            const layoutRow = (count, y) => {
+                if (count === 0) {
+                    return [];
+                }
+                const maxCardW = 180;
+                const cardW = Math.min(maxCardW, Math.floor((width - pad * 2 - gap * (count - 1)) / count));
+                const rowW = count * cardW + (count - 1) * gap;
+                const startX = (width - rowW) / 2;
+                return Array.from({ length: count }, (_, i) => ({
+                    x: startX + i * (cardW + gap),
+                    y,
+                    w: cardW,
+                    h: cardH
+                }));
+            };
+
+            const topY = pad;
+            const bottomY = height - pad - cardH;
+            const topPos = layoutRow(topCount, topY);
+            const bottomPos = layoutRow(bottomCount, bottomY);
+
+            topPos.forEach((pos, i) => positions.push({ ...blocks[i], ...pos }));
+            bottomPos.forEach((pos, i) => positions.push({ ...blocks[topCount + i], ...pos }));
+
+            const minY = topY + cardH + 50;
+            const maxY = bottomY - 50;
+            centerY = Math.min(Math.max(height * 0.45, minY), maxY);
+        }
+    }
+
+    // Draw turbine hub
+    ctx.fillStyle = palette.accent;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, isNarrow ? 10 : 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = palette.outline;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw turbine blades (more realistic)
+    const time = Date.now() / 1000;
+    const numBlades = 3;
+    const bladeLength = isNarrow ? 70 : 90;
+    const rootW = isNarrow ? 14 : 16;
+    const tipW = isNarrow ? 8 : 10;
+    const rpm = Math.max(10, Number.isFinite(status.rpm) ? status.rpm : 0);
+
+    for (let i = 0; i < numBlades; i++) {
+        const angle = time * 2 * Math.PI * (rpm / 60) + i * 2 * Math.PI / numBlades;
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(0, -rootW / 2);
+        ctx.lineTo(bladeLength, -tipW / 2);
+        ctx.quadraticCurveTo(bladeLength + 8, 0, bladeLength, tipW / 2);
+        ctx.lineTo(0, rootW / 2);
+        ctx.quadraticCurveTo(-6, 0, 0, -rootW / 2);
+        ctx.closePath();
+        ctx.fillStyle = palette.accent;
+        ctx.fill();
+        ctx.restore();
+    }
+
     ctx.font = "600 12px 'Space Grotesk', 'Segoe UI', system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    blocks.forEach(b => {
-        const cardW = 140;
-        const cardH = 64;
+    positions.forEach(b => {
         const cardX = b.x;
         const cardY = b.y;
+        const cardW = b.w;
+        const cardHeight = b.h;
         ctx.fillStyle = palette.panel;
-        roundRect(cardX, cardY, cardW, cardH, 12);
+        roundRect(cardX, cardY, cardW, cardHeight, 12);
         ctx.fill();
         ctx.strokeStyle = palette.outline;
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
         const lines = b.value.split("\n");
-        ctx.font = "600 13px 'JetBrains Mono', ui-monospace, monospace";
+        ctx.font = `600 ${isNarrow ? 12 : 13}px 'JetBrains Mono', ui-monospace, monospace`;
         lines.forEach((line, i) => {
             ctx.fillStyle = b.safe ? palette.ink : palette.danger;
-            ctx.fillText(line, cardX + cardW / 2, cardY + 34 + i * 15 - (lines.length - 1) * 8);
+            ctx.fillText(line, cardX + cardW / 2, cardY + cardHeight / 2 + 6 + i * 15 - (lines.length - 1) * 8);
         });
-        ctx.font = "600 11px 'Space Grotesk', 'Segoe UI', system-ui, sans-serif";
+        ctx.font = `600 ${isNarrow ? 10 : 11}px 'Space Grotesk', 'Segoe UI', system-ui, sans-serif`;
         ctx.fillStyle = palette.muted;
         ctx.fillText(b.label, cardX + cardW / 2, cardY + 14);
     });
 }
 
 function renderLoop() {
+    const now = performance.now();
+    stepStatus(now - lastFrame);
+    lastFrame = now;
     draw();
     requestAnimationFrame(renderLoop);
 }
@@ -229,4 +319,11 @@ function startPolling() {
 }
 
 startPolling();
+resizeCanvas();
 renderLoop();
+
+let resizeTimer;
+window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resizeCanvas, 80);
+});
