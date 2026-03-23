@@ -7,14 +7,12 @@ const openSettings = document.getElementById('open-settings');
 const settingsBackdrop = document.getElementById('settings-backdrop');
 const closeSettings = document.getElementById('close-settings');
 const saveSettingsBtn = document.getElementById('save-settings');
-const downloadSettingsBtn = document.getElementById('download-settings');
-const inputSourceMin = document.getElementById('setting-source-min');
-const inputSourceMax = document.getElementById('setting-source-max');
-const inputBattStart = document.getElementById('setting-batt-start');
-const inputBattStop = document.getElementById('setting-batt-stop');
-const inputTargetBuck = document.getElementById('setting-target-buck');
-const inputBattFull = document.getElementById('setting-batt-full');
-const inputBattEmpty = document.getElementById('setting-batt-empty');
+const resetSettingsBtn = document.getElementById('reset-settings');
+const confirmBackdrop = document.getElementById('confirm-backdrop');
+const confirmCancel = document.getElementById('confirm-cancel');
+const confirmReset = document.getElementById('confirm-reset');
+const inputPackFull = document.getElementById('setting-pack-full');
+const inputPackEmpty = document.getElementById('setting-pack-empty');
 const inputOnPercent = document.getElementById('setting-on-percent');
 const inputOffPercent = document.getElementById('setting-off-percent');
 
@@ -65,21 +63,20 @@ const settingsDefaults = {
     target_buck_voltage: 9,
     source_expected_min_v: 8.5,
     source_expected_max_v: 9.5,
-    batt_start_v: 11.5,
-    batt_stop_v: 10.8,
     batt_full_voltage: 12.6,
-    batt_empty_voltage: 10.8,
-    on_percent: 80,
-    off_percent: 60
+    batt_empty_voltage: 9.0,
+    batt_on_percent: 80,
+    batt_off_percent: 60
 };
 
 let settingsState = { ...settingsDefaults };
 let thresholds = {
-    battStartV: settingsState.batt_start_v,
-    battStopV: settingsState.batt_stop_v,
+    battStartV: 11.5,
+    battStopV: 10.8,
     sourceExpectedMinV: settingsState.source_expected_min_v,
     sourceExpectedMaxV: settingsState.source_expected_max_v
 };
+let settingsFileHandle = null;
 
 function normalizeStatus(raw) {
     const d = raw && typeof raw === "object" ? raw : {};
@@ -139,25 +136,32 @@ function resizeCanvas() {
 
 function applySettings(next) {
     settingsState = { ...settingsState, ...next };
+    const fullPack = Number.isFinite(settingsState.batt_full_voltage) ? settingsState.batt_full_voltage : settingsDefaults.batt_full_voltage;
+    const emptyPack = Number.isFinite(settingsState.batt_empty_voltage) ? settingsState.batt_empty_voltage : settingsDefaults.batt_empty_voltage;
+    const onPct = Number.isFinite(settingsState.batt_on_percent) ? settingsState.batt_on_percent : settingsDefaults.batt_on_percent;
+    const offPct = Number.isFinite(settingsState.batt_off_percent) ? settingsState.batt_off_percent : settingsDefaults.batt_off_percent;
+    const toVolt = (pct) => emptyPack + (fullPack - emptyPack) * (pct / 100);
     thresholds = {
-        battStartV: Number.isFinite(settingsState.batt_start_v) ? settingsState.batt_start_v : thresholds.battStartV,
-        battStopV: Number.isFinite(settingsState.batt_stop_v) ? settingsState.batt_stop_v : thresholds.battStopV,
+        battStartV: toVolt(onPct),
+        battStopV: toVolt(offPct),
         sourceExpectedMinV: Number.isFinite(settingsState.source_expected_min_v) ? settingsState.source_expected_min_v : thresholds.sourceExpectedMinV,
         sourceExpectedMaxV: Number.isFinite(settingsState.source_expected_max_v) ? settingsState.source_expected_max_v : thresholds.sourceExpectedMaxV
     };
 }
 
+function getPackVoltageRange() {
+    return {
+        full: Number.isFinite(settingsState.batt_full_voltage) ? settingsState.batt_full_voltage : settingsDefaults.batt_full_voltage,
+        empty: Number.isFinite(settingsState.batt_empty_voltage) ? settingsState.batt_empty_voltage : settingsDefaults.batt_empty_voltage
+    };
+}
+
 function fillSettingsForm() {
-    if (!inputSourceMin) return;
-    inputSourceMin.value = settingsState.source_expected_min_v;
-    inputSourceMax.value = settingsState.source_expected_max_v;
-    inputBattStart.value = settingsState.batt_start_v;
-    inputBattStop.value = settingsState.batt_stop_v;
-    inputTargetBuck.value = settingsState.target_buck_voltage;
-    inputBattFull.value = settingsState.batt_full_voltage;
-    inputBattEmpty.value = settingsState.batt_empty_voltage;
-    inputOnPercent.value = settingsState.on_percent;
-    inputOffPercent.value = settingsState.off_percent;
+    if (!inputPackFull) return;
+    inputPackFull.value = settingsState.batt_full_voltage;
+    inputPackEmpty.value = settingsState.batt_empty_voltage;
+    inputOnPercent.value = settingsState.batt_on_percent;
+    inputOffPercent.value = settingsState.batt_off_percent;
 }
 
 function parseNum(value, fallback) {
@@ -165,24 +169,38 @@ function parseNum(value, fallback) {
     return Number.isFinite(n) ? n : fallback;
 }
 
+async function getSettingsFileHandle() {
+    if (settingsFileHandle) return settingsFileHandle;
+    if (!window.showOpenFilePicker) {
+        alert("Your browser doesn't support direct file saving. Use a Chromium-based browser.");
+        return null;
+    }
+    const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: [{
+            description: "JSON",
+            accept: { "application/json": [".json"] }
+        }]
+    });
+    settingsFileHandle = handle;
+    return handle;
+}
+
+async function writeSettingsToFile() {
+    const handle = await getSettingsFileHandle();
+    if (!handle) return;
+    const writable = await handle.createWritable();
+    await writable.write(JSON.stringify(settingsState, null, 2));
+    await writable.close();
+}
+
 async function loadSettings() {
     let loaded = null;
     try {
-        const stored = localStorage.getItem("sky_settings");
-        if (stored) {
-            loaded = JSON.parse(stored);
-        }
+        const res = await fetch("data/settings.json", { cache: "no-store" });
+        loaded = await res.json();
     } catch {
         loaded = null;
-    }
-
-    if (!loaded) {
-        try {
-            const res = await fetch("data/settings.json", { cache: "no-store" });
-            loaded = await res.json();
-        } catch {
-            loaded = null;
-        }
     }
 
     if (loaded) {
@@ -202,15 +220,6 @@ function closeSettingsModal() {
     if (!settingsBackdrop) return;
     settingsBackdrop.classList.remove("open");
     settingsBackdrop.setAttribute("aria-hidden", "true");
-}
-
-function downloadSettings() {
-    const blob = new Blob([JSON.stringify(settingsState, null, 2)], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "settings.json";
-    link.click();
-    URL.revokeObjectURL(link.href);
 }
 
 // Fetch JSON
@@ -296,9 +305,13 @@ function draw() {
         });
     }
     if (availableKeys.has("use_source") || availableKeys.has("system_on")) {
+        const expMin = thresholds.sourceExpectedMinV;
+        const isUsingSource = Boolean(status.use_source)
+            && Number.isFinite(status.source_voltage)
+            && status.source_voltage >= expMin;
         blocks.push({
             label: "Power Mode",
-            value: `${status.use_source ? "SOURCE" : "BATTERY"}`,
+            value: `${isUsingSource ? "SOURCE" : "BATT"}`,
             safe: true
         });
     }
@@ -422,7 +435,12 @@ function renderLoop() {
     stepStatus(now - lastFrame);
     lastFrame = now;
     if (turbine) {
-        const rpm = Math.max(20, Number.isFinite(status.rpm) ? status.rpm : 0);
+        const battV = Number.isFinite(status.batt_voltage) ? status.batt_voltage : thresholds.battStopV;
+        const range = getPackVoltageRange();
+        const vMin = range.empty;
+        const vMax = range.full;
+        const t = Math.min(1, Math.max(0, (battV - vMin) / Math.max(0.1, vMax - vMin)));
+        const rpm = 35 + t * 180;
         const seconds = Math.min(6, Math.max(0.6, 60 / rpm));
         turbine.style.setProperty("--spin", `${seconds}s`);
     }
@@ -452,29 +470,65 @@ if (settingsBackdrop) {
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener("click", () => {
         const next = {
-            source_expected_min_v: parseNum(inputSourceMin?.value, settingsState.source_expected_min_v),
-            source_expected_max_v: parseNum(inputSourceMax?.value, settingsState.source_expected_max_v),
-            batt_start_v: parseNum(inputBattStart?.value, settingsState.batt_start_v),
-            batt_stop_v: parseNum(inputBattStop?.value, settingsState.batt_stop_v),
-            target_buck_voltage: parseNum(inputTargetBuck?.value, settingsState.target_buck_voltage),
-            batt_full_voltage: parseNum(inputBattFull?.value, settingsState.batt_full_voltage),
-            batt_empty_voltage: parseNum(inputBattEmpty?.value, settingsState.batt_empty_voltage),
-            on_percent: parseNum(inputOnPercent?.value, settingsState.on_percent),
-            off_percent: parseNum(inputOffPercent?.value, settingsState.off_percent)
+            batt_full_voltage: parseNum(inputPackFull?.value, settingsState.batt_full_voltage),
+            batt_empty_voltage: parseNum(inputPackEmpty?.value, settingsState.batt_empty_voltage),
+            batt_on_percent: parseNum(inputOnPercent?.value, settingsState.batt_on_percent),
+            batt_off_percent: parseNum(inputOffPercent?.value, settingsState.batt_off_percent)
         };
         applySettings(next);
-        try {
-            localStorage.setItem("sky_settings", JSON.stringify(settingsState));
-        } catch {
-            // ignore storage errors
-        }
-        updateData();
-        closeSettingsModal();
+        writeSettingsToFile()
+            .then(() => {
+                updateData();
+                closeSettingsModal();
+            })
+            .catch(() => {
+                alert("Unable to save settings. Check file permissions.");
+            });
     });
 }
 
-if (downloadSettingsBtn) {
-    downloadSettingsBtn.addEventListener("click", downloadSettings);
+function openConfirm() {
+    if (!confirmBackdrop) return;
+    confirmBackdrop.classList.add("open");
+    confirmBackdrop.setAttribute("aria-hidden", "false");
+}
+
+function closeConfirm() {
+    if (!confirmBackdrop) return;
+    confirmBackdrop.classList.remove("open");
+    confirmBackdrop.setAttribute("aria-hidden", "true");
+}
+
+if (resetSettingsBtn) {
+    resetSettingsBtn.addEventListener("click", openConfirm);
+}
+
+if (confirmCancel) {
+    confirmCancel.addEventListener("click", closeConfirm);
+}
+
+if (confirmBackdrop) {
+    confirmBackdrop.addEventListener("click", (event) => {
+        if (event.target === confirmBackdrop) {
+            closeConfirm();
+        }
+    });
+}
+
+if (confirmReset) {
+    confirmReset.addEventListener("click", () => {
+        applySettings(settingsDefaults);
+        fillSettingsForm();
+        writeSettingsToFile()
+            .then(() => {
+                updateData();
+                closeConfirm();
+                closeSettingsModal();
+            })
+            .catch(() => {
+                alert("Unable to reset settings. Check file permissions.");
+            });
+    });
 }
 
 function startPolling() {

@@ -9,12 +9,10 @@ const defaultSettings = {
     target_buck_voltage: 9,
     source_expected_min_v: 8.5,
     source_expected_max_v: 9.5,
-    batt_start_v: 11.5,
-    batt_stop_v: 10.8,
     batt_full_voltage: 12.6,
-    batt_empty_voltage: 10.8,
-    on_percent: 80,
-    off_percent: 60
+    batt_empty_voltage: 9.0,
+    batt_on_percent: 80,
+    batt_off_percent: 60
 };
 
 // Default status if missing
@@ -60,16 +58,16 @@ function generateData() {
 
     const settings = JSON.parse(fs.readFileSync(settingsFile));
 
-    const fullV = settings.batt_full_voltage;
-    const emptyV = settings.batt_empty_voltage;
-    const onPercent = settings.on_percent;
-    const offPercent = settings.off_percent;
+    const fullV = settings.batt_full_voltage ?? defaultSettings.batt_full_voltage;
+    const emptyV = settings.batt_empty_voltage ?? defaultSettings.batt_empty_voltage;
+    const onPercent = settings.batt_on_percent ?? defaultSettings.batt_on_percent;
+    const offPercent = settings.batt_off_percent ?? defaultSettings.batt_off_percent;
     const targetBuck = settings.target_buck_voltage;
-    const battStartV = settings.batt_start_v ?? defaultSettings.batt_start_v;
-    const battStopV = settings.batt_stop_v ?? defaultSettings.batt_stop_v;
     const sourceMin = settings.source_expected_min_v ?? defaultSettings.source_expected_min_v;
     const sourceMax = settings.source_expected_max_v ?? defaultSettings.source_expected_max_v;
     const sourceTarget = (sourceMin + sourceMax) / 2;
+    const battStartV = emptyV + (fullV - emptyV) * (onPercent / 100);
+    const battStopV = emptyV + (fullV - emptyV) * (offPercent / 100);
 
     // Occasionally toggle source presence for realism
     if (Math.random() < 0.02) {

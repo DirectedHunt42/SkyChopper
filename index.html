@@ -61,47 +61,43 @@
             </div>
             <div class="modal-body">
                 <div class="field">
-                    <label for="setting-source-min">Source Min Voltage</label>
-                    <input id="setting-source-min" type="number" step="0.1">
+                    <label for="setting-pack-full">Battery Full Voltage</label>
+                    <input id="setting-pack-full" type="number" step="0.01">
                 </div>
                 <div class="field">
-                    <label for="setting-source-max">Source Max Voltage</label>
-                    <input id="setting-source-max" type="number" step="0.1">
+                    <label for="setting-pack-empty">Battery Empty Voltage</label>
+                    <input id="setting-pack-empty" type="number" step="0.01">
                 </div>
                 <div class="field">
-                    <label for="setting-batt-start">Battery Start Voltage</label>
-                    <input id="setting-batt-start" type="number" step="0.1">
+                    <label for="setting-on-percent">Battery On Percent</label>
+                    <input id="setting-on-percent" type="number" step="1" min="0" max="100">
                 </div>
                 <div class="field">
-                    <label for="setting-batt-stop">Battery Stop Voltage</label>
-                    <input id="setting-batt-stop" type="number" step="0.1">
-                </div>
-                <div class="field">
-                    <label for="setting-target-buck">Buck Target Voltage</label>
-                    <input id="setting-target-buck" type="number" step="0.1">
-                </div>
-                <div class="field">
-                    <label for="setting-batt-full">Battery Full Voltage</label>
-                    <input id="setting-batt-full" type="number" step="0.1">
-                </div>
-                <div class="field">
-                    <label for="setting-batt-empty">Battery Empty Voltage</label>
-                    <input id="setting-batt-empty" type="number" step="0.1">
-                </div>
-                <div class="field">
-                    <label for="setting-on-percent">On Percent</label>
-                    <input id="setting-on-percent" type="number" step="1">
-                </div>
-                <div class="field">
-                    <label for="setting-off-percent">Off Percent</label>
-                    <input id="setting-off-percent" type="number" step="1">
+                    <label for="setting-off-percent">Battery Off Percent</label>
+                    <input id="setting-off-percent" type="number" step="1" min="0" max="100">
                 </div>
             </div>
             <div class="modal-actions">
-                <button class="ghost-btn" id="download-settings" type="button">Download JSON</button>
+                <button class="ghost-btn" id="reset-settings" type="button">Reset</button>
                 <button class="primary-btn" id="save-settings" type="button">Save</button>
             </div>
-            <div class="modal-note">Save updates the UI instantly and stores settings locally. Download replaces `data/settings.json` for the simulator.</div>
+            <div class="modal-note">Save writes to `data/settings.json` and updates the UI instantly.</div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="confirm-backdrop" aria-hidden="true">
+        <div class="modal confirm" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-eyebrow">Confirm</div>
+                    <h2 id="confirm-title">Reset settings?</h2>
+                </div>
+            </div>
+            <div class="modal-note">This will restore default battery settings and overwrite `data/settings.json`.</div>
+            <div class="modal-actions">
+                <button class="ghost-btn" id="confirm-cancel" type="button">Cancel</button>
+                <button class="primary-btn" id="confirm-reset" type="button">Reset</button>
+            </div>
         </div>
     </div>
 </div>
