@@ -23,7 +23,10 @@
 <div class="page">
     <header class="hero">
         <div class="eyebrow">Live telemetry</div>
-        <h1>SkyChopper Wind Dashboard</h1>
+        <div class="hero-row">
+            <h1>SkyChopper Wind Dashboard</h1>
+            <button class="settings-btn" id="open-settings" type="button">Settings</button>
+        </div>
     </header>
     <div class="panel">
         <div class="status-row">
@@ -44,6 +47,61 @@
                 <div class="blade blade-3"></div>
             </div>
             <canvas id="monitorCanvas" width="760" height="520"></canvas>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="settings-backdrop" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-eyebrow">Configuration</div>
+                    <h2 id="settings-title">Settings</h2>
+                </div>
+                <button class="icon-btn" id="close-settings" type="button" aria-label="Close settings">Close</button>
+            </div>
+            <div class="modal-body">
+                <div class="field">
+                    <label for="setting-source-min">Source Min Voltage</label>
+                    <input id="setting-source-min" type="number" step="0.1">
+                </div>
+                <div class="field">
+                    <label for="setting-source-max">Source Max Voltage</label>
+                    <input id="setting-source-max" type="number" step="0.1">
+                </div>
+                <div class="field">
+                    <label for="setting-batt-start">Battery Start Voltage</label>
+                    <input id="setting-batt-start" type="number" step="0.1">
+                </div>
+                <div class="field">
+                    <label for="setting-batt-stop">Battery Stop Voltage</label>
+                    <input id="setting-batt-stop" type="number" step="0.1">
+                </div>
+                <div class="field">
+                    <label for="setting-target-buck">Buck Target Voltage</label>
+                    <input id="setting-target-buck" type="number" step="0.1">
+                </div>
+                <div class="field">
+                    <label for="setting-batt-full">Battery Full Voltage</label>
+                    <input id="setting-batt-full" type="number" step="0.1">
+                </div>
+                <div class="field">
+                    <label for="setting-batt-empty">Battery Empty Voltage</label>
+                    <input id="setting-batt-empty" type="number" step="0.1">
+                </div>
+                <div class="field">
+                    <label for="setting-on-percent">On Percent</label>
+                    <input id="setting-on-percent" type="number" step="1">
+                </div>
+                <div class="field">
+                    <label for="setting-off-percent">Off Percent</label>
+                    <input id="setting-off-percent" type="number" step="1">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="ghost-btn" id="download-settings" type="button">Download JSON</button>
+                <button class="primary-btn" id="save-settings" type="button">Save</button>
+            </div>
+            <div class="modal-note">Save updates the UI instantly and stores settings locally. Download replaces `data/settings.json` for the simulator.</div>
         </div>
     </div>
 </div>

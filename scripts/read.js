@@ -7,6 +7,10 @@ const settingsFile = path.join(__dirname, "../data/settings.json");
 // Default settings if missing
 const defaultSettings = {
     target_buck_voltage: 9,
+    source_expected_min_v: 8.5,
+    source_expected_max_v: 9.5,
+    batt_start_v: 11.5,
+    batt_stop_v: 10.8,
     batt_full_voltage: 12.6,
     batt_empty_voltage: 10.8,
     on_percent: 80,
@@ -61,21 +65,27 @@ function generateData() {
     const onPercent = settings.on_percent;
     const offPercent = settings.off_percent;
     const targetBuck = settings.target_buck_voltage;
+    const battStartV = settings.batt_start_v ?? defaultSettings.batt_start_v;
+    const battStopV = settings.batt_stop_v ?? defaultSettings.batt_stop_v;
+    const sourceMin = settings.source_expected_min_v ?? defaultSettings.source_expected_min_v;
+    const sourceMax = settings.source_expected_max_v ?? defaultSettings.source_expected_max_v;
+    const sourceTarget = (sourceMin + sourceMax) / 2;
 
     // Occasionally toggle source presence for realism
     if (Math.random() < 0.02) {
         sourcePresent = !sourcePresent;
     }
 
-    // Source voltage around 9V with slight noise, sometimes off or slightly out of range
+    // Source voltage around target with slight noise, sometimes off or slightly out of range
     if (!sourcePresent) {
         sourceV = 0;
     } else {
         const drift = (Math.random() - 0.5) * 0.08;
-        sourceV = clamp(sourceV + drift, 8.2, 9.8);
+        sourceV = clamp(sourceV + drift, sourceMin - 0.3, sourceMax + 0.3);
         if (Math.random() < 0.05) {
-            sourceV = clamp(sourceV + (Math.random() - 0.5) * 1.2, 7.8, 10.2);
+            sourceV = clamp(sourceV + (Math.random() - 0.5) * 1.2, sourceMin - 0.8, sourceMax + 0.8);
         }
+        sourceV = sourceV + (sourceTarget - sourceV) * 0.1;
     }
 
     // Battery voltage drift based on load/source
@@ -109,10 +119,10 @@ function generateData() {
         batt_percent: percent,
         use_source: useSource,
         system_on: systemOn,
-        batt_start_v: 11.5,
-        batt_stop_v: 10.8,
-        source_expected_min_v: 8.5,
-        source_expected_max_v: 9.5,
+        batt_start_v: battStartV,
+        batt_stop_v: battStopV,
+        source_expected_min_v: sourceMin,
+        source_expected_max_v: sourceMax,
         time: Date.now()
     };
 

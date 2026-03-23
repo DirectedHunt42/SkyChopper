@@ -3,6 +3,20 @@ const ctx = canvas.getContext('2d');
 const turbine = document.getElementById('turbine');
 const statusSource = document.getElementById('status-source');
 const statusBattery = document.getElementById('status-battery');
+const openSettings = document.getElementById('open-settings');
+const settingsBackdrop = document.getElementById('settings-backdrop');
+const closeSettings = document.getElementById('close-settings');
+const saveSettingsBtn = document.getElementById('save-settings');
+const downloadSettingsBtn = document.getElementById('download-settings');
+const inputSourceMin = document.getElementById('setting-source-min');
+const inputSourceMax = document.getElementById('setting-source-max');
+const inputBattStart = document.getElementById('setting-batt-start');
+const inputBattStop = document.getElementById('setting-batt-stop');
+const inputTargetBuck = document.getElementById('setting-target-buck');
+const inputBattFull = document.getElementById('setting-batt-full');
+const inputBattEmpty = document.getElementById('setting-batt-empty');
+const inputOnPercent = document.getElementById('setting-on-percent');
+const inputOffPercent = document.getElementById('setting-off-percent');
 
 const defaultStatus = {
     batt_voltage: 0,
@@ -47,11 +61,24 @@ const palette = prefersLight
         outline: "#1f2937"
     };
 
-const thresholds = {
-    battStartV: 11.5,
-    battStopV: 10.8,
-    sourceExpectedMinV: 8.5,
-    sourceExpectedMaxV: 9.5
+const settingsDefaults = {
+    target_buck_voltage: 9,
+    source_expected_min_v: 8.5,
+    source_expected_max_v: 9.5,
+    batt_start_v: 11.5,
+    batt_stop_v: 10.8,
+    batt_full_voltage: 12.6,
+    batt_empty_voltage: 10.8,
+    on_percent: 80,
+    off_percent: 60
+};
+
+let settingsState = { ...settingsDefaults };
+let thresholds = {
+    battStartV: settingsState.batt_start_v,
+    battStopV: settingsState.batt_stop_v,
+    sourceExpectedMinV: settingsState.source_expected_min_v,
+    sourceExpectedMaxV: settingsState.source_expected_max_v
 };
 
 function normalizeStatus(raw) {
@@ -108,6 +135,82 @@ function resizeCanvas() {
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
     canvas.height = Math.max(1, Math.floor(rect.height * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function applySettings(next) {
+    settingsState = { ...settingsState, ...next };
+    thresholds = {
+        battStartV: Number.isFinite(settingsState.batt_start_v) ? settingsState.batt_start_v : thresholds.battStartV,
+        battStopV: Number.isFinite(settingsState.batt_stop_v) ? settingsState.batt_stop_v : thresholds.battStopV,
+        sourceExpectedMinV: Number.isFinite(settingsState.source_expected_min_v) ? settingsState.source_expected_min_v : thresholds.sourceExpectedMinV,
+        sourceExpectedMaxV: Number.isFinite(settingsState.source_expected_max_v) ? settingsState.source_expected_max_v : thresholds.sourceExpectedMaxV
+    };
+}
+
+function fillSettingsForm() {
+    if (!inputSourceMin) return;
+    inputSourceMin.value = settingsState.source_expected_min_v;
+    inputSourceMax.value = settingsState.source_expected_max_v;
+    inputBattStart.value = settingsState.batt_start_v;
+    inputBattStop.value = settingsState.batt_stop_v;
+    inputTargetBuck.value = settingsState.target_buck_voltage;
+    inputBattFull.value = settingsState.batt_full_voltage;
+    inputBattEmpty.value = settingsState.batt_empty_voltage;
+    inputOnPercent.value = settingsState.on_percent;
+    inputOffPercent.value = settingsState.off_percent;
+}
+
+function parseNum(value, fallback) {
+    const n = Number.parseFloat(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+async function loadSettings() {
+    let loaded = null;
+    try {
+        const stored = localStorage.getItem("sky_settings");
+        if (stored) {
+            loaded = JSON.parse(stored);
+        }
+    } catch {
+        loaded = null;
+    }
+
+    if (!loaded) {
+        try {
+            const res = await fetch("data/settings.json", { cache: "no-store" });
+            loaded = await res.json();
+        } catch {
+            loaded = null;
+        }
+    }
+
+    if (loaded) {
+        applySettings(loaded);
+    }
+
+    fillSettingsForm();
+}
+
+function openSettingsModal() {
+    if (!settingsBackdrop) return;
+    settingsBackdrop.classList.add("open");
+    settingsBackdrop.setAttribute("aria-hidden", "false");
+}
+
+function closeSettingsModal() {
+    if (!settingsBackdrop) return;
+    settingsBackdrop.classList.remove("open");
+    settingsBackdrop.setAttribute("aria-hidden", "true");
+}
+
+function downloadSettings() {
+    const blob = new Blob([JSON.stringify(settingsState, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "settings.json";
+    link.click();
+    URL.revokeObjectURL(link.href);
 }
 
 // Fetch JSON
@@ -327,12 +430,60 @@ function renderLoop() {
     requestAnimationFrame(renderLoop);
 }
 
+if (openSettings) {
+    openSettings.addEventListener("click", () => {
+        fillSettingsForm();
+        openSettingsModal();
+    });
+}
+
+if (closeSettings) {
+    closeSettings.addEventListener("click", closeSettingsModal);
+}
+
+if (settingsBackdrop) {
+    settingsBackdrop.addEventListener("click", (event) => {
+        if (event.target === settingsBackdrop) {
+            closeSettingsModal();
+        }
+    });
+}
+
+if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener("click", () => {
+        const next = {
+            source_expected_min_v: parseNum(inputSourceMin?.value, settingsState.source_expected_min_v),
+            source_expected_max_v: parseNum(inputSourceMax?.value, settingsState.source_expected_max_v),
+            batt_start_v: parseNum(inputBattStart?.value, settingsState.batt_start_v),
+            batt_stop_v: parseNum(inputBattStop?.value, settingsState.batt_stop_v),
+            target_buck_voltage: parseNum(inputTargetBuck?.value, settingsState.target_buck_voltage),
+            batt_full_voltage: parseNum(inputBattFull?.value, settingsState.batt_full_voltage),
+            batt_empty_voltage: parseNum(inputBattEmpty?.value, settingsState.batt_empty_voltage),
+            on_percent: parseNum(inputOnPercent?.value, settingsState.on_percent),
+            off_percent: parseNum(inputOffPercent?.value, settingsState.off_percent)
+        };
+        applySettings(next);
+        try {
+            localStorage.setItem("sky_settings", JSON.stringify(settingsState));
+        } catch {
+            // ignore storage errors
+        }
+        updateData();
+        closeSettingsModal();
+    });
+}
+
+if (downloadSettingsBtn) {
+    downloadSettingsBtn.addEventListener("click", downloadSettings);
+}
+
 function startPolling() {
     updateData();
     setInterval(updateData, 1000);
 }
 
 startPolling();
+loadSettings();
 resizeCanvas();
 renderLoop();
 
