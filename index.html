@@ -24,10 +24,31 @@
     <header class="hero">
         <div class="eyebrow">Live telemetry</div>
         <h1>SkyChopper Wind Dashboard</h1>
-        <div class="sub">Power state, battery health, and turbine status in real time</div>
     </header>
     <div class="panel">
-        <canvas id="monitorCanvas" width="760" height="520"></canvas>
+        <div class="status-row">
+            <div class="status-item">
+                <span class="status-dot" id="status-system"></span>
+                <span class="status-label">System</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot" id="status-source"></span>
+                <span class="status-label">Source</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot" id="status-battery"></span>
+                <span class="status-label">Battery</span>
+            </div>
+        </div>
+        <div class="canvas-wrap">
+            <div class="turbine" id="turbine" aria-hidden="true">
+                <div class="turbine-hub"></div>
+                <div class="blade blade-1"></div>
+                <div class="blade blade-2"></div>
+                <div class="blade blade-3"></div>
+            </div>
+            <canvas id="monitorCanvas" width="760" height="520"></canvas>
+        </div>
     </div>
 </div>
 

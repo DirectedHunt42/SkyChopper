@@ -1,5 +1,9 @@
 const canvas = document.getElementById('monitorCanvas');
 const ctx = canvas.getContext('2d');
+const turbine = document.getElementById('turbine');
+const statusSystem = document.getElementById('status-system');
+const statusSource = document.getElementById('status-source');
+const statusBattery = document.getElementById('status-battery');
 
 const defaultStatus = {
     batt_voltage: 0,
@@ -107,6 +111,18 @@ async function updateData() {
         const d = await res.json();
         targetStatus = normalizeStatus(d);
         availableKeys = new Set(Object.keys(d || {}));
+
+        if (statusSystem) {
+            statusSystem.className = "status-dot" + (d.system_on ? " on" : "");
+        }
+        if (statusSource) {
+            statusSource.className = "status-dot" + (d.use_source ? " on" : "");
+        }
+        if (statusBattery) {
+            const pct = Number.isFinite(d.batt_percent) ? d.batt_percent : status.batt_percent;
+            const level = pct > 25 ? " on" : pct > 15 ? " warn" : " danger";
+            statusBattery.className = "status-dot" + level;
+        }
     } catch (err) {
         // keep previous status if fetch fails
     }
@@ -152,7 +168,7 @@ function draw() {
     if (availableKeys.has("use_source") || availableKeys.has("system_on")) {
         blocks.push({
             label: "Power Mode",
-            value: `${status.use_source ? "SOURCE" : "BATTERY"}\n${status.system_on ? "ON" : "OFF"}`,
+            value: `${status.use_source ? "SOURCE" : "BATTERY"}`,
             safe: true
         });
     }
@@ -243,40 +259,6 @@ function draw() {
         }
     }
 
-    // Draw turbine hub
-    ctx.fillStyle = palette.accent;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, isNarrow ? 10 : 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = palette.outline;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Draw turbine blades (more realistic)
-    const time = Date.now() / 1000;
-    const numBlades = 3;
-    const bladeLength = isNarrow ? 70 : 90;
-    const rootW = isNarrow ? 14 : 16;
-    const tipW = isNarrow ? 8 : 10;
-    const rpm = Math.max(10, Number.isFinite(status.rpm) ? status.rpm : 0);
-
-    for (let i = 0; i < numBlades; i++) {
-        const angle = time * 2 * Math.PI * (rpm / 60) + i * 2 * Math.PI / numBlades;
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(angle);
-        ctx.beginPath();
-        ctx.moveTo(0, -rootW / 2);
-        ctx.lineTo(bladeLength, -tipW / 2);
-        ctx.quadraticCurveTo(bladeLength + 8, 0, bladeLength, tipW / 2);
-        ctx.lineTo(0, rootW / 2);
-        ctx.quadraticCurveTo(-6, 0, 0, -rootW / 2);
-        ctx.closePath();
-        ctx.fillStyle = palette.accent;
-        ctx.fill();
-        ctx.restore();
-    }
-
     ctx.font = "600 12px 'Space Grotesk', 'Segoe UI', system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -309,6 +291,11 @@ function renderLoop() {
     const now = performance.now();
     stepStatus(now - lastFrame);
     lastFrame = now;
+    if (turbine) {
+        const rpm = Math.max(20, Number.isFinite(status.rpm) ? status.rpm : 0);
+        const seconds = Math.min(6, Math.max(0.6, 60 / rpm));
+        turbine.style.setProperty("--spin", `${seconds}s`);
+    }
     draw();
     requestAnimationFrame(renderLoop);
 }
