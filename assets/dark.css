@@ -186,6 +186,28 @@ h1 {
     color: var(--ink);
 }
 
+.checkbox-field {
+    grid-column: span 2;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    background: #0b1120;
+}
+
+.checkbox-field label {
+    color: var(--ink);
+    font-size: 12px;
+}
+
+.checkbox-field input {
+    width: 18px;
+    height: 18px;
+    accent-color: #38bdf8;
+}
+
 .modal-actions {
     display: flex;
     justify-content: flex-end;
@@ -233,6 +255,59 @@ h1 {
     background: #0b1120;
     max-height: 260px;
     overflow: auto;
+}
+
+.log-chart {
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    background: #0b1120;
+    padding: 12px;
+}
+
+.log-chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.log-chart-title {
+    font-size: 12px;
+    color: var(--ink);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.log-legend {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+}
+
+.legend-batt { background: #22c55e; }
+.legend-source { background: #f59e0b; }
+.legend-buck { background: #38bdf8; }
+
+#logChart {
+    display: block;
+    width: 100%;
+    height: 180px;
+    margin-top: 10px;
 }
 
 .log-table {
@@ -391,6 +466,10 @@ canvas {
 @media (max-width: 560px) {
     .modal-body {
         grid-template-columns: 1fr;
+    }
+
+    .checkbox-field {
+        grid-column: span 1;
     }
 
     .turbine {

@@ -15,7 +15,8 @@ const defaultSettings = {
     batt_full_voltage: 12.6,
     batt_empty_voltage: 9.0,
     batt_on_percent: 80,
-    batt_off_percent: 60
+    batt_off_percent: 60,
+    sim_fallback_enabled: true
 };
 
 // Default status if missing
@@ -340,14 +341,49 @@ function generateData() {
 }
 
 if (!startSerialBridge()) {
-    setInterval(generateData, 1000);
-    console.log("System simulator running...");
+    const settings = loadSettings();
+    const simEnabled = typeof settings.sim_fallback_enabled === "boolean"
+        ? settings.sim_fallback_enabled
+        : defaultSettings.sim_fallback_enabled;
+    if (simEnabled) {
+        setInterval(generateData, 1000);
+        console.log("System simulator running...");
+    } else {
+        const decision = computeDecision(defaultStatus, defaultStatus);
+        decision.arduinoConnected = false;
+        writeStatus(defaultStatus, decision);
+        console.log("Simulator fallback disabled; waiting for serial data.");
+    }
 }
 
 if (ENABLE_API_SERVER) {
     const server = http.createServer((req, res) => {
         const requestUrl = new URL(req.url || "/", `http://localhost:${HTTP_PORT}`);
         const pathname = requestUrl.pathname || "/";
+
+        if (pathname === "/api/settings" && req.method === "POST") {
+            let body = "";
+            req.on("data", (chunk) => {
+                body += chunk;
+            });
+            req.on("end", () => {
+                try {
+                    const payload = JSON.parse(body || "{}");
+                    const nextSettings = {
+                        ...defaultSettings,
+                        ...payload
+                    };
+                    ensureDataFolder();
+                    fs.writeFileSync(settingsFile, JSON.stringify(nextSettings, null, 2));
+                    res.writeHead(200, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: true }));
+                } catch {
+                    res.writeHead(400, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: false, error: "Invalid JSON" }));
+                }
+            });
+            return;
+        }
 
         if (pathname === "/api/reset-all" && req.method === "POST") {
             resetAllData();

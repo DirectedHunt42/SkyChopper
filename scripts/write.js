@@ -31,6 +31,14 @@ const inputPackFull = document.getElementById('setting-pack-full');
 const inputPackEmpty = document.getElementById('setting-pack-empty');
 const inputOnPercent = document.getElementById('setting-on-percent');
 const inputOffPercent = document.getElementById('setting-off-percent');
+const inputSimFallback = document.getElementById('setting-sim-fallback');
+const logChart = document.getElementById('logChart');
+const logChartCtx = logChart ? logChart.getContext('2d') : null;
+let logRowsCache = [];
+const LOG_WINDOW_MS = 2 * 60 * 1000;
+const LOG_WINDOW_PAD_MS = 10000;
+const LOG_DISPLAY_LAG_MS = 5000;
+const LOG_LEFT_HIDE_MS = 10000;
 
 const defaultStatus = {
     batt_voltage: 0,
@@ -82,7 +90,8 @@ const settingsDefaults = {
     batt_full_voltage: 12.6,
     batt_empty_voltage: 9.0,
     batt_on_percent: 80,
-    batt_off_percent: 60
+    batt_off_percent: 60,
+    sim_fallback_enabled: true
 };
 
 let settingsState = { ...settingsDefaults };
@@ -92,8 +101,6 @@ let thresholds = {
     sourceExpectedMinV: settingsState.source_expected_min_v,
     sourceExpectedMaxV: settingsState.source_expected_max_v
 };
-let settingsFileHandle = null;
-
 function applyStatusLevel(dotEl, level) {
     if (!dotEl) return;
     dotEl.className = "status-dot" + level;
@@ -160,8 +167,20 @@ function resizeCanvas() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+function resizeLogChart() {
+    if (!logChart || !logChartCtx) return;
+    const rect = logChart.getBoundingClientRect();
+    const scale = window.devicePixelRatio || 1;
+    logChart.width = Math.max(1, Math.floor(rect.width * scale));
+    logChart.height = Math.max(1, Math.floor(rect.height * scale));
+    logChartCtx.setTransform(scale, 0, 0, scale, 0, 0);
+}
+
 function applySettings(next) {
     settingsState = { ...settingsState, ...next };
+    if (typeof settingsState.sim_fallback_enabled !== "boolean") {
+        settingsState.sim_fallback_enabled = settingsDefaults.sim_fallback_enabled;
+    }
     const fullPack = Number.isFinite(settingsState.batt_full_voltage) ? settingsState.batt_full_voltage : settingsDefaults.batt_full_voltage;
     const emptyPack = Number.isFinite(settingsState.batt_empty_voltage) ? settingsState.batt_empty_voltage : settingsDefaults.batt_empty_voltage;
     const onPct = Number.isFinite(settingsState.batt_on_percent) ? settingsState.batt_on_percent : settingsDefaults.batt_on_percent;
@@ -188,6 +207,9 @@ function fillSettingsForm() {
     inputPackEmpty.value = settingsState.batt_empty_voltage;
     inputOnPercent.value = settingsState.batt_on_percent;
     inputOffPercent.value = settingsState.batt_off_percent;
+    if (inputSimFallback) {
+        inputSimFallback.checked = Boolean(settingsState.sim_fallback_enabled);
+    }
 }
 
 function parseNum(value, fallback) {
@@ -195,29 +217,15 @@ function parseNum(value, fallback) {
     return Number.isFinite(n) ? n : fallback;
 }
 
-async function getSettingsFileHandle() {
-    if (settingsFileHandle) return settingsFileHandle;
-    if (!window.showOpenFilePicker) {
-        alert("Your browser doesn't support direct file saving. Use a Chromium-based browser.");
-        return null;
-    }
-    const [handle] = await window.showOpenFilePicker({
-        multiple: false,
-        types: [{
-            description: "JSON",
-            accept: { "application/json": [".json"] }
-        }]
-    });
-    settingsFileHandle = handle;
-    return handle;
-}
-
 async function writeSettingsToFile() {
-    const handle = await getSettingsFileHandle();
-    if (!handle) return;
-    const writable = await handle.createWritable();
-    await writable.write(JSON.stringify(settingsState, null, 2));
-    await writable.close();
+    const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settingsState)
+    });
+    if (!res.ok) {
+        throw new Error("Settings save failed");
+    }
 }
 
 async function loadSettings() {
@@ -287,6 +295,172 @@ function renderLogTable(rows) {
     });
 }
 
+function renderLogChart(rows) {
+    if (!logChart || !logChartCtx) return;
+    const ctx2d = logChartCtx;
+    const scale = window.devicePixelRatio || 1;
+    const width = logChart.width / scale;
+    const height = logChart.height / scale;
+    ctx2d.clearRect(0, 0, width, height);
+
+    if (!rows.length) {
+        ctx2d.fillStyle = palette.muted;
+        ctx2d.font = "11px 'Space Grotesk', 'Segoe UI', system-ui, sans-serif";
+        ctx2d.textAlign = "center";
+        ctx2d.textBaseline = "middle";
+        ctx2d.fillText("No log data yet.", width / 2, height / 2);
+        return;
+    }
+
+    const now = Date.now();
+    const displayNow = now - LOG_DISPLAY_LAG_MS;
+    const windowMs = LOG_WINDOW_MS + LOG_WINDOW_PAD_MS;
+
+    const parsed = rows.map((row) => ({
+        t: Date.parse(row[0]),
+        batt: Number.parseFloat(row[1]),
+        source: Number.parseFloat(row[2]),
+        buck: Number.parseFloat(row[3])
+    })).filter((d) => Number.isFinite(d.t));
+
+    const slice = parsed.filter((d) => d.t >= displayNow - windowMs && d.t <= displayNow);
+
+    const lastPoint = slice[slice.length - 1];
+    if (lastPoint && lastPoint.t < displayNow) {
+        slice.push({
+            t: displayNow,
+            batt: lastPoint.batt,
+            source: lastPoint.source,
+            buck: lastPoint.buck
+        });
+    }
+
+    let minV = Infinity;
+    let maxV = -Infinity;
+    slice.forEach((d) => {
+        [d.batt, d.source, d.buck].forEach((v) => {
+            if (Number.isFinite(v)) {
+                minV = Math.min(minV, v);
+                maxV = Math.max(maxV, v);
+            }
+        });
+    });
+
+    if (!Number.isFinite(minV) || !Number.isFinite(maxV)) {
+        ctx2d.fillStyle = palette.muted;
+        ctx2d.font = "11px 'Space Grotesk', 'Segoe UI', system-ui, sans-serif";
+        ctx2d.textAlign = "center";
+        ctx2d.textBaseline = "middle";
+        ctx2d.fillText("No voltage data yet.", width / 2, height / 2);
+        return;
+    }
+
+    if (minV === maxV) {
+        minV -= 0.5;
+        maxV += 0.5;
+    }
+
+    const range = maxV - minV;
+    const pad = range * 0.12;
+    const yMin = minV - pad;
+    const yMax = maxV + pad;
+
+    const left = 38;
+    const right = 12;
+    const top = 12;
+    const bottom = 30;
+    const plotW = Math.max(1, width - left - right);
+    const plotH = Math.max(1, height - top - bottom);
+    const ticks = 4;
+
+    ctx2d.strokeStyle = palette.outline;
+    ctx2d.lineWidth = 1;
+    ctx2d.font = "10px 'JetBrains Mono', ui-monospace, monospace";
+    ctx2d.fillStyle = palette.muted;
+    ctx2d.textAlign = "right";
+    ctx2d.textBaseline = "middle";
+
+    for (let i = 0; i < ticks; i++) {
+        const t = i / (ticks - 1);
+        const y = top + plotH * t;
+        ctx2d.beginPath();
+        ctx2d.moveTo(left, y);
+        ctx2d.lineTo(width - right, y);
+        ctx2d.stroke();
+        const value = yMax - (yMax - yMin) * t;
+        ctx2d.fillText(value.toFixed(1), left - 6, y);
+    }
+
+    const visibleStart = displayNow - windowMs + LOG_LEFT_HIDE_MS;
+    const visibleWindow = windowMs - LOG_LEFT_HIDE_MS;
+    const toX = (t) => {
+        const clamped = Math.max(visibleStart, Math.min(displayNow, t));
+        return left + ((clamped - visibleStart) / visibleWindow) * plotW;
+    };
+    const toY = (v) => top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+    const tickStart = visibleStart;
+    const tickStep = 5000;
+    const tickEnd = displayNow;
+    const tickY = top + plotH;
+    ctx2d.strokeStyle = palette.outline;
+    ctx2d.lineWidth = 1.2;
+    for (let t = Math.ceil(tickStart / tickStep) * tickStep; t <= tickEnd; t += tickStep) {
+        const x = toX(t);
+        ctx2d.beginPath();
+        ctx2d.moveTo(x, tickY);
+        ctx2d.lineTo(x, tickY + 6);
+        ctx2d.stroke();
+    }
+
+    if (0 >= yMin && 0 <= yMax) {
+        const zeroY = toY(0);
+        ctx2d.strokeStyle = palette.ink;
+        ctx2d.lineWidth = 1.6;
+        ctx2d.beginPath();
+        ctx2d.moveTo(left, zeroY);
+        ctx2d.lineTo(width - right, zeroY);
+        ctx2d.stroke();
+    }
+
+    const drawSmoothSeries = (key, color) => {
+        const points = slice
+            .filter((d) => Number.isFinite(d[key]))
+            .map((d) => ({ x: toX(d.t), y: toY(d[key]) }));
+        if (!points.length) return;
+
+        ctx2d.strokeStyle = color;
+        ctx2d.lineWidth = 2;
+        ctx2d.lineJoin = "round";
+        ctx2d.lineCap = "round";
+        ctx2d.beginPath();
+        ctx2d.moveTo(points[0].x, points[0].y);
+
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            ctx2d.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+
+        if (points.length > 1) {
+            const last = points[points.length - 1];
+            ctx2d.lineTo(last.x, last.y);
+        }
+        ctx2d.stroke();
+    };
+
+    drawSmoothSeries("batt", palette.good);
+    drawSmoothSeries("source", palette.warn);
+    drawSmoothSeries("buck", palette.accent);
+
+    ctx2d.strokeStyle = palette.ink;
+    ctx2d.lineWidth = 1.6;
+    ctx2d.beginPath();
+    ctx2d.moveTo(left, top);
+    ctx2d.lineTo(left, top + plotH);
+    ctx2d.stroke();
+}
+
 async function loadLogTable() {
     if (!logTableBody) return;
     try {
@@ -301,6 +475,8 @@ async function loadLogTable() {
             ? (logTableWrap.scrollHeight - logTableWrap.scrollTop - logTableWrap.clientHeight) < 24
             : true;
         renderLogTable(rows);
+        logRowsCache = rows;
+        renderLogChart(rows);
         if (logTableWrap) {
             requestAnimationFrame(() => {
                 if (shouldStickToBottom) {
@@ -310,6 +486,7 @@ async function loadLogTable() {
         }
     } catch {
         renderLogTable([]);
+        renderLogChart([]);
     }
 }
 
@@ -584,6 +761,9 @@ function renderLoop() {
         turbine.style.setProperty("--spin", `${seconds}s`);
     }
     draw();
+    if (logChart && logChartCtx) {
+        renderLogChart(logRowsCache);
+    }
     requestAnimationFrame(renderLoop);
 }
 
@@ -597,6 +777,7 @@ if (openSettings) {
 if (openLogs) {
     openLogs.addEventListener("click", () => {
         openLogsModal();
+        resizeLogChart();
         loadLogTable();
         if (!logAutoRefreshTimer) {
             logAutoRefreshTimer = setInterval(loadLogTable, 5000);
@@ -654,7 +835,8 @@ if (saveSettingsBtn) {
             batt_full_voltage: parseNum(inputPackFull?.value, settingsState.batt_full_voltage),
             batt_empty_voltage: parseNum(inputPackEmpty?.value, settingsState.batt_empty_voltage),
             batt_on_percent: parseNum(inputOnPercent?.value, settingsState.batt_on_percent),
-            batt_off_percent: parseNum(inputOffPercent?.value, settingsState.batt_off_percent)
+            batt_off_percent: parseNum(inputOffPercent?.value, settingsState.batt_off_percent),
+            sim_fallback_enabled: Boolean(inputSimFallback?.checked)
         };
         applySettings(next);
         writeSettingsToFile()
@@ -808,12 +990,16 @@ function startPolling() {
 startPolling();
 loadSettings();
 resizeCanvas();
+resizeLogChart();
 renderLoop();
 
 let resizeTimer;
 window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(resizeCanvas, 80);
+    resizeTimer = setTimeout(() => {
+        resizeCanvas();
+        resizeLogChart();
+    }, 80);
 });
 
 // Prevent accidental reloads (F5 / Ctrl+R / Cmd+R)

@@ -83,6 +83,10 @@
                     <label for="setting-off-percent">Battery Off Percent</label>
                     <input id="setting-off-percent" type="number" step="1" min="0" max="100">
                 </div>
+                <div class="field checkbox-field">
+                    <label for="setting-sim-fallback">Enable simulator fallback</label>
+                    <input id="setting-sim-fallback" type="checkbox">
+                </div>
             </div>
             <div class="modal-actions">
                 <button class="ghost-btn" id="reset-settings" type="button">Reset</button>
@@ -103,6 +107,17 @@
                 <button class="icon-btn" id="close-logs" type="button" aria-label="Close logs">Close</button>
             </div>
             <div class="modal-note">Download or clear the long-term CSV log stored on the Pi.</div>
+            <div class="log-chart">
+                <div class="log-chart-header">
+                    <div class="log-chart-title">Voltage Trend</div>
+                    <div class="log-legend">
+                        <span class="legend-item"><span class="legend-swatch legend-batt"></span>Battery</span>
+                        <span class="legend-item"><span class="legend-swatch legend-source"></span>Source</span>
+                        <span class="legend-item"><span class="legend-swatch legend-buck"></span>Buck</span>
+                    </div>
+                </div>
+                <canvas id="logChart" width="640" height="180"></canvas>
+            </div>
             <div class="log-table-wrap" id="log-table-wrap">
                 <table class="log-table" id="log-table">
                     <thead>
