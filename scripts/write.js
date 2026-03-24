@@ -4,6 +4,7 @@ const turbine = document.getElementById('turbine');
 const statusSource = document.getElementById('status-source');
 const statusBattery = document.getElementById('status-battery');
 const statusArduino = document.getElementById('status-arduino');
+const turbineLabel = document.getElementById('turbine-label');
 const openSettings = document.getElementById('open-settings');
 const openLogs = document.getElementById('open-logs');
 const downloadLog = document.getElementById('download-log');
@@ -758,8 +759,12 @@ function renderLoop() {
     stepStatus(now - lastFrame);
     lastFrame = now;
     if (turbine) {
+        const isSimulatorEnabled = Boolean(settingsState.sim_fallback_enabled);
         const seconds = 1.25;
         turbine.style.setProperty("--spin", `${seconds}s`);
+        if (turbineLabel) {
+            turbineLabel.classList.toggle("show", isSimulatorEnabled);
+        }
     }
     draw();
     if (logChart && logChartCtx) {
