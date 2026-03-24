@@ -3,14 +3,30 @@ const ctx = canvas.getContext('2d');
 const turbine = document.getElementById('turbine');
 const statusSource = document.getElementById('status-source');
 const statusBattery = document.getElementById('status-battery');
+const statusArduino = document.getElementById('status-arduino');
 const openSettings = document.getElementById('open-settings');
+const openLogs = document.getElementById('open-logs');
+const downloadLog = document.getElementById('download-log');
+const clearLogs = document.getElementById('clear-logs');
 const settingsBackdrop = document.getElementById('settings-backdrop');
 const closeSettings = document.getElementById('close-settings');
 const saveSettingsBtn = document.getElementById('save-settings');
 const resetSettingsBtn = document.getElementById('reset-settings');
+const resetAllBtn = document.getElementById('reset-all');
+const logsBackdrop = document.getElementById('logs-backdrop');
+const closeLogs = document.getElementById('close-logs');
+const logTableWrap = document.getElementById('log-table-wrap');
+const logTableBody = document.getElementById('log-table-body');
+let logAutoRefreshTimer = null;
 const confirmBackdrop = document.getElementById('confirm-backdrop');
 const confirmCancel = document.getElementById('confirm-cancel');
 const confirmReset = document.getElementById('confirm-reset');
+const confirmClearLogs = document.getElementById('confirm-clear-logs');
+const confirmClearLogsCancel = document.getElementById('confirm-clear-logs-cancel');
+const confirmClearLogsOk = document.getElementById('confirm-clear-logs-ok');
+const confirmResetAll = document.getElementById('confirm-reset-all');
+const confirmResetAllCancel = document.getElementById('confirm-reset-all-cancel');
+const confirmResetAllOk = document.getElementById('confirm-reset-all-ok');
 const inputPackFull = document.getElementById('setting-pack-full');
 const inputPackEmpty = document.getElementById('setting-pack-empty');
 const inputOnPercent = document.getElementById('setting-on-percent');
@@ -100,7 +116,8 @@ function normalizeStatus(raw) {
         current: Number.isFinite(d.current) ? d.current : defaultStatus.current,
         use_source: Boolean(d.use_source),
         system_on: Boolean(d.system_on),
-        dump_load: Boolean(d.dump_load)
+        dump_load: Boolean(d.dump_load),
+        arduino_connected: Boolean(d.arduino_connected)
     };
 }
 
@@ -231,6 +248,71 @@ function closeSettingsModal() {
     settingsBackdrop.setAttribute("aria-hidden", "true");
 }
 
+function openLogsModal() {
+    if (!logsBackdrop) return;
+    logsBackdrop.classList.add("open");
+    logsBackdrop.setAttribute("aria-hidden", "false");
+}
+
+function closeLogsModal() {
+    if (!logsBackdrop) return;
+    logsBackdrop.classList.remove("open");
+    logsBackdrop.setAttribute("aria-hidden", "true");
+    if (logAutoRefreshTimer) {
+        clearInterval(logAutoRefreshTimer);
+        logAutoRefreshTimer = null;
+    }
+}
+
+function renderLogTable(rows) {
+    if (!logTableBody) return;
+    logTableBody.innerHTML = "";
+    if (!rows.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 4;
+        td.textContent = "No log data yet.";
+        tr.appendChild(td);
+        logTableBody.appendChild(tr);
+        return;
+    }
+    rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        for (let i = 0; i < 4; i++) {
+            const td = document.createElement("td");
+            td.textContent = row[i] ?? "";
+            tr.appendChild(td);
+        }
+        logTableBody.appendChild(tr);
+    });
+}
+
+async function loadLogTable() {
+    if (!logTableBody) return;
+    try {
+        const res = await fetch("data/log.csv", { cache: "no-store" });
+        if (!res.ok) throw new Error("log fetch failed");
+        const text = await res.text();
+        const lines = text.trim().split(/\r?\n/);
+        const rows = lines.length > 1
+            ? lines.slice(1).map((line) => line.split(","))
+            : [];
+        const shouldStickToBottom = logTableWrap
+            ? (logTableWrap.scrollHeight - logTableWrap.scrollTop - logTableWrap.clientHeight) < 24
+            : true;
+        renderLogTable(rows);
+        if (logTableWrap) {
+            requestAnimationFrame(() => {
+                if (shouldStickToBottom) {
+                    logTableWrap.scrollTop = logTableWrap.scrollHeight;
+                }
+            });
+        }
+    } catch {
+        renderLogTable([]);
+    }
+}
+
 // Fetch JSON
 async function updateData() {
     try {
@@ -275,6 +357,17 @@ async function updateData() {
             if (battItem) {
                 battItem.setAttribute("data-tooltip", battTip);
                 battItem.setAttribute("aria-label", battTip);
+            }
+        }
+        if (statusArduino) {
+            const isConnected = Boolean(d.arduino_connected);
+            const level = isConnected ? " on" : " danger";
+            applyStatusLevel(statusArduino, level);
+            const tip = isConnected ? "Arduino connected (serial)" : "Simulator mode";
+            const arduinoItem = statusArduino.closest(".status-item");
+            if (arduinoItem) {
+                arduinoItem.setAttribute("data-tooltip", tip);
+                arduinoItem.setAttribute("aria-label", tip);
             }
         }
     } catch (err) {
@@ -501,6 +594,48 @@ if (openSettings) {
     });
 }
 
+if (openLogs) {
+    openLogs.addEventListener("click", () => {
+        openLogsModal();
+        loadLogTable();
+        if (!logAutoRefreshTimer) {
+            logAutoRefreshTimer = setInterval(loadLogTable, 5000);
+        }
+    });
+}
+
+if (closeLogs) {
+    closeLogs.addEventListener("click", closeLogsModal);
+}
+
+if (logsBackdrop) {
+    logsBackdrop.addEventListener("click", (event) => {
+        if (event.target === logsBackdrop) {
+            closeLogsModal();
+        }
+    });
+}
+
+if (downloadLog) {
+    downloadLog.addEventListener("click", async () => {
+        try {
+            const res = await fetch("data/log.csv", { cache: "no-store" });
+            if (!res.ok) throw new Error("download failed");
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "log.csv";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch {
+            alert("Unable to download log.csv. Make sure the server is running.");
+        }
+    });
+}
+
 if (closeSettings) {
     closeSettings.addEventListener("click", closeSettingsModal);
 }
@@ -545,8 +680,40 @@ function closeConfirm() {
     confirmBackdrop.setAttribute("aria-hidden", "true");
 }
 
+function openConfirmClearLogs() {
+    if (!confirmClearLogs) return;
+    confirmClearLogs.classList.add("open");
+    confirmClearLogs.setAttribute("aria-hidden", "false");
+}
+
+function closeConfirmClearLogs() {
+    if (!confirmClearLogs) return;
+    confirmClearLogs.classList.remove("open");
+    confirmClearLogs.setAttribute("aria-hidden", "true");
+}
+
+function openConfirmResetAll() {
+    if (!confirmResetAll) return;
+    confirmResetAll.classList.add("open");
+    confirmResetAll.setAttribute("aria-hidden", "false");
+}
+
+function closeConfirmResetAll() {
+    if (!confirmResetAll) return;
+    confirmResetAll.classList.remove("open");
+    confirmResetAll.setAttribute("aria-hidden", "true");
+}
+
 if (resetSettingsBtn) {
     resetSettingsBtn.addEventListener("click", openConfirm);
+}
+
+if (resetAllBtn) {
+    resetAllBtn.addEventListener("click", openConfirmResetAll);
+}
+
+if (clearLogs) {
+    clearLogs.addEventListener("click", openConfirmClearLogs);
 }
 
 if (confirmCancel) {
@@ -557,6 +724,22 @@ if (confirmBackdrop) {
     confirmBackdrop.addEventListener("click", (event) => {
         if (event.target === confirmBackdrop) {
             closeConfirm();
+        }
+    });
+}
+
+if (confirmClearLogs) {
+    confirmClearLogs.addEventListener("click", (event) => {
+        if (event.target === confirmClearLogs) {
+            closeConfirmClearLogs();
+        }
+    });
+}
+
+if (confirmResetAll) {
+    confirmResetAll.addEventListener("click", (event) => {
+        if (event.target === confirmResetAll) {
+            closeConfirmResetAll();
         }
     });
 }
@@ -577,6 +760,46 @@ if (confirmReset) {
     });
 }
 
+async function postAction(path) {
+    const res = await fetch(path, { method: "POST" });
+    if (!res.ok) {
+        throw new Error("Request failed");
+    }
+}
+
+if (confirmClearLogsOk) {
+    confirmClearLogsOk.addEventListener("click", async () => {
+        try {
+            await postAction("/api/clear-logs");
+            closeConfirmClearLogs();
+            closeLogsModal();
+            loadLogTable();
+        } catch {
+            alert("Unable to clear logs. Make sure the backend is running.");
+        }
+    });
+}
+
+if (confirmClearLogsCancel) {
+    confirmClearLogsCancel.addEventListener("click", closeConfirmClearLogs);
+}
+
+if (confirmResetAllOk) {
+    confirmResetAllOk.addEventListener("click", async () => {
+        try {
+            await postAction("/api/reset-all");
+            closeConfirmResetAll();
+            closeSettingsModal();
+        } catch {
+            alert("Unable to reset all data. Make sure the backend is running.");
+        }
+    });
+}
+
+if (confirmResetAllCancel) {
+    confirmResetAllCancel.addEventListener("click", closeConfirmResetAll);
+}
+
 function startPolling() {
     updateData();
     setInterval(updateData, 1000);
@@ -591,4 +814,12 @@ let resizeTimer;
 window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(resizeCanvas, 80);
+});
+
+// Prevent accidental reloads (F5 / Ctrl+R / Cmd+R)
+window.addEventListener("keydown", (event) => {
+    const key = event.key.toLowerCase();
+    if (key === "f5" || ((event.ctrlKey || event.metaKey) && key === "r")) {
+        event.preventDefault();
+    }
 });

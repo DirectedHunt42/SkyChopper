@@ -52,6 +52,12 @@ body {
     gap: 16px;
 }
 
+.hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .eyebrow {
     font-size: 12px;
     letter-spacing: 0.2em;
@@ -193,6 +199,16 @@ h1 {
     border: 1px solid transparent;
 }
 
+.danger-btn {
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid #b91c1c;
+    background: #ef4444;
+    color: #0b1120;
+}
+
 .primary-btn {
     background: #0ea5e9;
     color: white;
@@ -207,6 +223,38 @@ h1 {
 .modal-note {
     font-size: 11px;
     color: var(--muted);
+}
+
+.log-table-wrap {
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    background: #ffffff;
+    max-height: 260px;
+    overflow: auto;
+}
+
+.log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    color: var(--ink);
+}
+
+.log-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f1f5f9;
+    color: var(--ink);
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--panel-border);
+    z-index: 2;
+}
+
+.log-table tbody td {
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
 .status-row {

@@ -10,18 +10,18 @@ A technical, canvas-driven telemetry UI for a wind turbine power system. The fro
 - Light/dark theme swap driven by `prefers-color-scheme`.
 
 ## Quick Start
-1. Serve the site (required for `fetch()` and file save permissions):
+1. Run the Pi backend (telemetry + logging):
 
 ```powershell
-python -m http.server 8000
+SERIAL_PORT=/dev/ttyUSB0 node scripts/read.js
 ```
 
-2. Ensure a valid `data/status.json` is being updated by your telemetry source.
+2. Serve the UI with VS Code Live Server (or any static server).
 
-3. Open the dashboard:
+3. If you want the Reset/Clear buttons to work, run the API server:
 
-```
-http://localhost:8000
+```powershell
+ENABLE_API_SERVER=1 PORT=8001 node scripts/read.js
 ```
 
 ## Settings

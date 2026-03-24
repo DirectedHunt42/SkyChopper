@@ -1,8 +1,11 @@
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
 
 const statusFile = path.join(__dirname, "../data/status.json");
 const settingsFile = path.join(__dirname, "../data/settings.json");
+const logFile = path.join(__dirname, "../data/log.csv");
+const dataFolder = path.join(__dirname, "../data");
 
 // Default settings if missing
 const defaultSettings = {
@@ -26,9 +29,12 @@ const defaultStatus = {
     time: Date.now()
 };
 
+function ensureDataFolder() {
+    if (!fs.existsSync(dataFolder)) fs.mkdirSync(dataFolder, { recursive: true });
+}
+
 // Ensure data folder exists
-const dataFolder = path.join(__dirname, "../data");
-if (!fs.existsSync(dataFolder)) fs.mkdirSync(dataFolder);
+ensureDataFolder();
 
 // Create settings.json if missing
 if (!fs.existsSync(settingsFile)) {
@@ -42,6 +48,201 @@ if (!fs.existsSync(statusFile)) {
     console.log("Created default status.json");
 }
 
+// Create log.csv if missing
+if (!fs.existsSync(logFile)) {
+    fs.writeFileSync(logFile, "time_iso,batt_voltage,source_voltage,buck_voltage\n");
+    console.log("Created log.csv");
+}
+
+// ===== Serial bridge (preferred) =====
+// Uses `serialport` if installed. Otherwise falls back to simulator mode.
+const SERIAL_PORT = process.env.SERIAL_PORT || "";
+const SERIAL_BAUD = Number.parseInt(process.env.SERIAL_BAUD || "115200", 10);
+const HTTP_PORT = Number.parseInt(process.env.PORT || "8000", 10);
+const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER === "1";
+
+const LOG_INTERVAL_MS = 5000;
+const LOG_MAX_LINES = 10000;
+let lastLogAt = 0;
+let logLineCount = 0;
+
+function countLogLines() {
+    try {
+        const text = fs.readFileSync(logFile, "utf8");
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        logLineCount = Math.max(0, lines.length - 1);
+    } catch {
+        logLineCount = 0;
+    }
+}
+
+function trimLogIfNeeded() {
+    if (logLineCount <= LOG_MAX_LINES) return;
+    const text = fs.readFileSync(logFile, "utf8");
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    const header = lines[0] || "time_iso,batt_voltage,source_voltage,buck_voltage";
+    const dataLines = lines.slice(1);
+    const keep = dataLines.slice(-LOG_MAX_LINES);
+    const next = [header, ...keep].join("\n") + "\n";
+    fs.writeFileSync(logFile, next);
+    logLineCount = keep.length;
+}
+
+function maybeLog(telemetry) {
+    const now = Date.now();
+    if (now - lastLogAt < LOG_INTERVAL_MS) return;
+    lastLogAt = now;
+    ensureDataFolder();
+    const line = [
+        new Date(now).toISOString(),
+        Number.isFinite(telemetry.batt_voltage) ? telemetry.batt_voltage.toFixed(3) : "",
+        Number.isFinite(telemetry.source_voltage) ? telemetry.source_voltage.toFixed(3) : "",
+        Number.isFinite(telemetry.buck_voltage) ? telemetry.buck_voltage.toFixed(3) : ""
+    ].join(",") + "\n";
+    fs.appendFileSync(logFile, line);
+    logLineCount += 1;
+    trimLogIfNeeded();
+}
+
+countLogLines();
+
+function loadSettings() {
+    return JSON.parse(fs.readFileSync(settingsFile));
+}
+
+function computeDecision(telemetry, prev) {
+    const settings = loadSettings();
+    const fullV = settings.batt_full_voltage ?? defaultSettings.batt_full_voltage;
+    const emptyV = settings.batt_empty_voltage ?? defaultSettings.batt_empty_voltage;
+    const onPercent = settings.batt_on_percent ?? defaultSettings.batt_on_percent;
+    const offPercent = settings.batt_off_percent ?? defaultSettings.batt_off_percent;
+    const sourceMin = settings.source_expected_min_v ?? defaultSettings.source_expected_min_v;
+    const sourceMax = settings.source_expected_max_v ?? defaultSettings.source_expected_max_v;
+    const battStartV = emptyV + (fullV - emptyV) * (onPercent / 100);
+    const battStopV = emptyV + (fullV - emptyV) * (offPercent / 100);
+
+    const battV = Number.isFinite(telemetry.batt_voltage) ? telemetry.batt_voltage : prev.batt_voltage;
+    const sourceV = Number.isFinite(telemetry.source_voltage) ? telemetry.source_voltage : prev.source_voltage;
+    const battPercent = ((battV - emptyV) / (fullV - emptyV)) * 100;
+    const clampedPercent = clamp(battPercent, 0, 100);
+
+    let systemOn = prev.system_on;
+    if (!systemOn && clampedPercent >= onPercent) systemOn = true;
+    if (systemOn && clampedPercent <= offPercent) systemOn = false;
+
+    const useSource = systemOn && sourceV > 0.1 && sourceV >= sourceMin;
+
+    return {
+        settings,
+        battStartV,
+        battStopV,
+        battPercent: clampedPercent,
+        systemOn,
+        useSource,
+        sourceMin,
+        sourceMax
+    };
+}
+
+function writeStatus(telemetry, decision) {
+    ensureDataFolder();
+    const payload = {
+        ...telemetry,
+        batt_percent: decision.battPercent,
+        use_source: decision.useSource,
+        system_on: decision.systemOn,
+        batt_start_v: decision.battStartV,
+        batt_stop_v: decision.battStopV,
+        source_expected_min_v: decision.sourceMin,
+        source_expected_max_v: decision.sourceMax,
+        arduino_connected: decision.arduinoConnected,
+        time: Date.now()
+    };
+    fs.writeFileSync(statusFile, JSON.stringify(payload, null, 2));
+}
+
+function resetAllData() {
+    if (fs.existsSync(dataFolder)) {
+        fs.rmSync(dataFolder, { recursive: true, force: true });
+    }
+    ensureDataFolder();
+    fs.writeFileSync(settingsFile, JSON.stringify(defaultSettings, null, 2));
+    fs.writeFileSync(statusFile, JSON.stringify(defaultStatus, null, 2));
+    fs.writeFileSync(logFile, "time_iso,batt_voltage,source_voltage,buck_voltage\n");
+    logLineCount = 0;
+    lastLogAt = 0;
+}
+
+function clearLogs() {
+    ensureDataFolder();
+    fs.writeFileSync(logFile, "time_iso,batt_voltage,source_voltage,buck_voltage\n");
+    logLineCount = 0;
+}
+
+function startSerialBridge() {
+    let SerialPort;
+    let ReadlineParser;
+    try {
+        // eslint-disable-next-line global-require
+        ({ SerialPort, ReadlineParser } = require("serialport"));
+    } catch (err) {
+        console.log("serialport not installed; falling back to simulator mode.");
+        return false;
+    }
+
+    if (!SERIAL_PORT) {
+        console.log("SERIAL_PORT not set; falling back to simulator mode.");
+        return false;
+    }
+
+    const port = new SerialPort({ path: SERIAL_PORT, baudRate: SERIAL_BAUD });
+    const parser = port.pipe(new ReadlineParser({ delimiter: "\n" }));
+
+    let lastDecision = {
+        system_on: defaultStatus.system_on,
+        use_source: defaultStatus.use_source,
+        batt_voltage: defaultStatus.batt_voltage,
+        source_voltage: defaultStatus.source_voltage
+    };
+
+    parser.on("data", (line) => {
+        const text = String(line).trim();
+        if (!text) return;
+        try {
+            const data = JSON.parse(text);
+            const decision = computeDecision(data, lastDecision);
+            decision.arduinoConnected = true;
+            writeStatus(data, decision);
+            maybeLog(data);
+
+            if (decision.useSource !== lastDecision.use_source) {
+                const cmd = decision.useSource ? "MODE SOURCE\n" : "MODE BATT\n";
+                port.write(cmd);
+            }
+
+            lastDecision = {
+                system_on: decision.systemOn,
+                use_source: decision.useSource,
+                batt_voltage: data.batt_voltage,
+                source_voltage: data.source_voltage
+            };
+        } catch {
+            // Ignore malformed lines
+        }
+    });
+
+    port.on("open", () => {
+        console.log(`Serial bridge running on ${SERIAL_PORT} @ ${SERIAL_BAUD}`);
+    });
+
+    port.on("error", (err) => {
+        console.log("Serial error:", err.message);
+    });
+
+    return true;
+}
+
+// ===== Simulator fallback =====
 // State memory for hysteresis
 let systemOn = defaultStatus.system_on;
 let useSource = defaultStatus.use_source;
@@ -55,7 +256,6 @@ function clamp(x, a, b) {
 }
 
 function generateData() {
-
     const settings = JSON.parse(fs.readFileSync(settingsFile));
 
     const fullV = settings.batt_full_voltage ?? defaultSettings.batt_full_voltage;
@@ -124,8 +324,50 @@ function generateData() {
         time: Date.now()
     };
 
-    fs.writeFileSync(statusFile, JSON.stringify(data, null, 2));
+    const decision = {
+        battPercent: percent,
+        useSource: useSource,
+        systemOn: systemOn,
+        battStartV: battStartV,
+        battStopV: battStopV,
+        sourceMin: sourceMin,
+        sourceMax: sourceMax,
+        arduinoConnected: false
+    };
+
+    writeStatus(data, decision);
+    maybeLog(data);
 }
 
-setInterval(generateData, 1000);
-console.log("System simulator running...");
+if (!startSerialBridge()) {
+    setInterval(generateData, 1000);
+    console.log("System simulator running...");
+}
+
+if (ENABLE_API_SERVER) {
+    const server = http.createServer((req, res) => {
+        const requestUrl = new URL(req.url || "/", `http://localhost:${HTTP_PORT}`);
+        const pathname = requestUrl.pathname || "/";
+
+        if (pathname === "/api/reset-all" && req.method === "POST") {
+            resetAllData();
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true }));
+            return;
+        }
+
+        if (pathname === "/api/clear-logs" && req.method === "POST") {
+            clearLogs();
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true }));
+            return;
+        }
+
+        res.writeHead(404);
+        res.end("Not found");
+    });
+
+    server.listen(HTTP_PORT, () => {
+        console.log(`API server running at http://localhost:${HTTP_PORT}`);
+    });
+}
