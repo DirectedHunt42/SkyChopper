@@ -18,6 +18,7 @@ const logsBackdrop = document.getElementById('logs-backdrop');
 const closeLogs = document.getElementById('close-logs');
 const logTableWrap = document.getElementById('log-table-wrap');
 const logTableBody = document.getElementById('log-table-body');
+const logLinesCount = document.getElementById('log-lines-count');   // ← NEW: for live log count
 let logAutoRefreshTimer = null;
 const confirmBackdrop = document.getElementById('confirm-backdrop');
 const confirmCancel = document.getElementById('confirm-cancel');
@@ -473,12 +474,22 @@ async function loadLogTable() {
         const rows = lines.length > 1
             ? lines.slice(1).map((line) => line.split(","))
             : [];
+
+        // ←←← LIVE LOG COUNT DISPLAY
+        if (logLinesCount) {
+            const count = rows.length;
+            logLinesCount.textContent = `${count.toLocaleString()} / 1 000 000 log lines used`;
+        }
+        // ←←← END LIVE COUNT
+
         const shouldStickToBottom = logTableWrap
             ? (logTableWrap.scrollHeight - logTableWrap.scrollTop - logTableWrap.clientHeight) < 24
             : true;
+
         renderLogTable(rows);
         logRowsCache = rows;
         renderLogChart(rows);
+
         if (logTableWrap) {
             requestAnimationFrame(() => {
                 if (shouldStickToBottom) {
@@ -489,6 +500,10 @@ async function loadLogTable() {
     } catch {
         renderLogTable([]);
         renderLogChart([]);
+
+        if (logLinesCount) {
+            logLinesCount.textContent = `0 / 1 000 000 000 log lines used`;
+        }
     }
 }
 

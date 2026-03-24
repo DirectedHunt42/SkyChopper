@@ -63,7 +63,7 @@ const HTTP_PORT = Number.parseInt(process.env.PORT || "8000", 10);
 const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER !== "0";
 
 const LOG_INTERVAL_MS = 5000;
-const LOG_MAX_LINES = 10000;
+const LOG_MAX_LINES = 1000000; // 100k lines ~ 10MB, adjust as needed
 let lastLogAt = 0;
 let logLineCount = 0;
 let simulatorTimer = null;
