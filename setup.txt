@@ -1,0 +1,50 @@
+SkyChopper Raspberry Pi Setup
+=============================
+
+This script installs dependencies, configures nginx to serve the dashboard,
+sets the hostname to skychopper, and registers the telemetry reader to run
+on boot.
+
+Prerequisites
+-------------
+1) Copy the repo to your Raspberry Pi (or git clone it).
+2) Open a terminal and cd into the repo root.
+
+Run the setup
+-------------
+1) Make the script executable:
+   chmod +x setup.sh
+
+2) Run it with sudo:
+   sudo ./setup.sh
+
+What it does
+------------
+- Installs nginx and avahi-daemon.
+- Installs Node.js LTS if missing.
+- Serves index.html on port 80 (http://<pi-ip>/).
+- Sets the hostname to skychopper (http://skychopper.local/).
+- Creates a systemd service to run scripts/read.js at boot.
+- Enables and starts nginx, avahi, and the SkyChopper service.
+
+Verify
+------
+Check service status:
+  systemctl status skychopper
+
+Check nginx:
+  systemctl status nginx
+
+Check hostname:
+  hostname
+
+Access the dashboard:
+  http://<pi-ip>/
+  http://skychopper.local/
+
+Troubleshooting
+---------------
+- If skychopper.local does not resolve, ensure avahi-daemon is running:
+    sudo systemctl status avahi-daemon
+- If the API doesn't respond, check the service logs:
+    sudo journalctl -u skychopper -e
