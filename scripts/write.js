@@ -78,6 +78,15 @@ let thresholds = {
 };
 let settingsFileHandle = null;
 
+function applyStatusLevel(dotEl, level) {
+    if (!dotEl) return;
+    dotEl.className = "status-dot" + level;
+    const item = dotEl.closest(".status-item");
+    if (item) {
+        item.className = "status-item" + level;
+    }
+}
+
 function normalizeStatus(raw) {
     const d = raw && typeof raw === "object" ? raw : {};
     return {
@@ -236,10 +245,16 @@ async function updateData() {
             const expMax = Number.isFinite(d.source_expected_max_v) ? d.source_expected_max_v : thresholds.sourceExpectedMaxV;
             let level = " danger";
             if (Number.isFinite(srcV) && srcV > 0.1) {
-                level = (srcV >= expMin && srcV <= expMax) ? " on" : " warn";
+                if (srcV > expMax) {
+                    level = " warn";
+                } else if (srcV >= expMin) {
+                    level = " on";
+                } else {
+                    level = " danger";
+                }
             }
-            statusSource.className = "status-dot" + level;
-            const sourceTip = `Source ${srcV.toFixed(2)} V (target ${expMin.toFixed(1)}–${expMax.toFixed(1)} V)`;
+            applyStatusLevel(statusSource, level);
+            const sourceTip = `Source ${srcV.toFixed(2)} V (target ${expMin.toFixed(1)}-${expMax.toFixed(1)} V)`;
             const sourceItem = statusSource.closest(".status-item");
             if (sourceItem) {
                 sourceItem.setAttribute("data-tooltip", sourceTip);
@@ -254,7 +269,7 @@ async function updateData() {
             if (Number.isFinite(battV)) {
                 level = battV >= startV ? " on" : battV >= stopV ? " warn" : " danger";
             }
-            statusBattery.className = "status-dot" + level;
+            applyStatusLevel(statusBattery, level);
             const battTip = `Battery ${battV.toFixed(2)} V (start ${startV.toFixed(1)} V, stop ${stopV.toFixed(1)} V)`;
             const battItem = statusBattery.closest(".status-item");
             if (battItem) {
@@ -282,26 +297,63 @@ function draw() {
     const cardH = isNarrow ? 58 : 64;
 
     // Data blocks
+    const getSourceLevel = () => {
+        if (!Number.isFinite(status.source_voltage) || status.source_voltage <= 0.1) {
+            return "danger";
+        }
+        if (status.source_voltage > thresholds.sourceExpectedMaxV) {
+            return "warn";
+        }
+        if (status.source_voltage >= thresholds.sourceExpectedMinV) {
+            return "good";
+        }
+        return "danger";
+    };
+
+    const getBatteryLevel = () => {
+        if (!Number.isFinite(status.batt_voltage)) {
+            return "danger";
+        }
+        if (status.batt_voltage >= thresholds.battStartV) {
+            return "good";
+        }
+        if (status.batt_voltage >= thresholds.battStopV) {
+            return "warn";
+        }
+        return "danger";
+    };
+
+    const levelToColor = (level) => {
+        if (level === "good") return palette.good;
+        if (level === "warn") return palette.warn;
+        if (level === "danger") return palette.danger;
+        return palette.ink;
+    };
+
     const blocks = [];
     if (availableKeys.has("batt_voltage") || availableKeys.has("batt_percent")) {
         blocks.push({
             label: "Battery",
             value: `${status.batt_voltage.toFixed(2)} V\n${status.batt_percent.toFixed(1)} %`,
-            safe: status.batt_percent > 20
+            level: getBatteryLevel()
         });
     }
     if (availableKeys.has("source_voltage")) {
         blocks.push({
             label: "Source",
             value: `${status.source_voltage.toFixed(2)} V`,
-            safe: status.source_voltage > 10
+            level: getSourceLevel()
         });
     }
     if (availableKeys.has("buck_voltage")) {
+        const targetBuck = Number.isFinite(settingsState.target_buck_voltage)
+            ? settingsState.target_buck_voltage
+            : settingsDefaults.target_buck_voltage;
+        const buckDelta = Math.abs(status.buck_voltage - targetBuck);
         blocks.push({
             label: "Buck Output",
             value: `${status.buck_voltage.toFixed(2)} V`,
-            safe: status.buck_voltage > 8
+            level: buckDelta <= 0.5 ? "good" : "danger"
         });
     }
     if (availableKeys.has("use_source") || availableKeys.has("system_on")) {
@@ -312,28 +364,28 @@ function draw() {
         blocks.push({
             label: "Power Mode",
             value: `${isUsingSource ? "SOURCE" : "BATT"}`,
-            safe: true
+            level: isUsingSource ? "warn" : "good"
         });
     }
     if (availableKeys.has("rpm")) {
         blocks.push({
             label: "RPM",
             value: `${Math.round(status.rpm)}`,
-            safe: true
+            level: "good"
         });
     }
     if (availableKeys.has("current")) {
         blocks.push({
             label: "Current",
             value: `${status.current.toFixed(2)} A`,
-            safe: status.current < 10
+            level: status.current < 10 ? "good" : "danger"
         });
     }
     if (availableKeys.has("dump_load")) {
         blocks.push({
             label: "Dump Load",
             value: `${status.dump_load ? "ON" : "OFF"}`,
-            safe: !status.dump_load
+            level: status.dump_load ? "danger" : "good"
         });
     }
 
@@ -421,7 +473,7 @@ function draw() {
         const lines = b.value.split("\n");
         ctx.font = `600 ${isNarrow ? 12 : 13}px 'JetBrains Mono', ui-monospace, monospace`;
         lines.forEach((line, i) => {
-            ctx.fillStyle = b.safe ? palette.ink : palette.danger;
+            ctx.fillStyle = levelToColor(b.level);
             ctx.fillText(line, cardX + cardW / 2, cardY + cardHeight / 2 + 6 + i * 15 - (lines.length - 1) * 8);
         });
         ctx.font = `600 ${isNarrow ? 10 : 11}px 'Space Grotesk', 'Segoe UI', system-ui, sans-serif`;
@@ -435,13 +487,7 @@ function renderLoop() {
     stepStatus(now - lastFrame);
     lastFrame = now;
     if (turbine) {
-        const battV = Number.isFinite(status.batt_voltage) ? status.batt_voltage : thresholds.battStopV;
-        const range = getPackVoltageRange();
-        const vMin = range.empty;
-        const vMax = range.full;
-        const t = Math.min(1, Math.max(0, (battV - vMin) / Math.max(0.1, vMax - vMin)));
-        const rpm = 35 + t * 180;
-        const seconds = Math.min(6, Math.max(0.6, 60 / rpm));
+        const seconds = 1.25;
         turbine.style.setProperty("--spin", `${seconds}s`);
     }
     draw();

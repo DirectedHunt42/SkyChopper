@@ -3,8 +3,8 @@
 :root {
     --bg: #0b1020;
     --bg-2: #0f172a;
-    --ink: #e2e8f0;
-    --muted: #94a3b8;
+    --ink: #ffffff;
+    --muted: #ffffff;
     --panel: #0f172a;
     --panel-border: #1f2937;
     --shadow: 0 24px 60px rgba(2, 6, 23, 0.6);
@@ -224,9 +224,13 @@ h1 {
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    color: var(--muted);
+    color: #ffffff;
     letter-spacing: 0.02em;
     position: relative;
+}
+
+.status-label {
+    color: #ffffff;
 }
 
 .status-dot {
@@ -259,7 +263,7 @@ h1 {
     top: 100%;
     margin-top: 8px;
     background: rgba(15, 23, 42, 0.95);
-    color: #e2e8f0;
+    color: #ffffff;
     padding: 6px 8px;
     border-radius: 8px;
     font-size: 11px;
