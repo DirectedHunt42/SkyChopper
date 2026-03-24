@@ -1,0 +1,8 @@
+{
+  "watch": [
+    "data/settings.json",
+    "scripts/read.js"
+  ],
+  "ext": "js,json",
+  "exec": "node scripts/read.js"
+}

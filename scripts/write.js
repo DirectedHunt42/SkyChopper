@@ -35,6 +35,7 @@ const inputSimFallback = document.getElementById('setting-sim-fallback');
 const logChart = document.getElementById('logChart');
 const logChartCtx = logChart ? logChart.getContext('2d') : null;
 let logRowsCache = [];
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -218,7 +219,7 @@ function parseNum(value, fallback) {
 }
 
 async function writeSettingsToFile() {
-    const res = await fetch("/api/settings", {
+    const res = await fetch(`${API_BASE}/api/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settingsState)
@@ -845,7 +846,7 @@ if (saveSettingsBtn) {
                 closeSettingsModal();
             })
             .catch(() => {
-                alert("Unable to save settings. Check file permissions.");
+                alert("Unable to save settings. Make sure the API server is running (set ENABLE_API_SERVER=1).");
             });
     });
 }
@@ -943,7 +944,7 @@ if (confirmReset) {
 }
 
 async function postAction(path) {
-    const res = await fetch(path, { method: "POST" });
+    const res = await fetch(`${API_BASE}${path}`, { method: "POST" });
     if (!res.ok) {
         throw new Error("Request failed");
     }

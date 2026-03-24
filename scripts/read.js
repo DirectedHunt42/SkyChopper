@@ -60,12 +60,14 @@ if (!fs.existsSync(logFile)) {
 const SERIAL_PORT = process.env.SERIAL_PORT || "";
 const SERIAL_BAUD = Number.parseInt(process.env.SERIAL_BAUD || "115200", 10);
 const HTTP_PORT = Number.parseInt(process.env.PORT || "8000", 10);
-const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER === "1";
+const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER !== "0";
 
 const LOG_INTERVAL_MS = 5000;
 const LOG_MAX_LINES = 10000;
 let lastLogAt = 0;
 let logLineCount = 0;
+let simulatorTimer = null;
+let pendingSettingsSync = null;
 
 function countLogLines() {
     try {
@@ -108,7 +110,11 @@ function maybeLog(telemetry) {
 countLogLines();
 
 function loadSettings() {
-    return JSON.parse(fs.readFileSync(settingsFile));
+    try {
+        return JSON.parse(fs.readFileSync(settingsFile));
+    } catch {
+        return { ...defaultSettings };
+    }
 }
 
 function computeDecision(telemetry, prev) {
@@ -341,25 +347,59 @@ function generateData() {
 }
 
 if (!startSerialBridge()) {
-    const settings = loadSettings();
-    const simEnabled = typeof settings.sim_fallback_enabled === "boolean"
-        ? settings.sim_fallback_enabled
-        : defaultSettings.sim_fallback_enabled;
-    if (simEnabled) {
-        setInterval(generateData, 1000);
+    const startSimulator = () => {
+        if (simulatorTimer) return;
+        simulatorTimer = setInterval(generateData, 1000);
         console.log("System simulator running...");
-    } else {
+    };
+
+    const stopSimulator = () => {
+        if (!simulatorTimer) return;
+        clearInterval(simulatorTimer);
+        simulatorTimer = null;
         const decision = computeDecision(defaultStatus, defaultStatus);
         decision.arduinoConnected = false;
         writeStatus(defaultStatus, decision);
         console.log("Simulator fallback disabled; waiting for serial data.");
-    }
+    };
+
+    const syncSimulatorFallback = () => {
+        const settings = loadSettings();
+        const simEnabled = typeof settings.sim_fallback_enabled === "boolean"
+            ? settings.sim_fallback_enabled
+            : defaultSettings.sim_fallback_enabled;
+        if (simEnabled) {
+            startSimulator();
+        } else {
+            stopSimulator();
+        }
+    };
+
+    syncSimulatorFallback();
+
+    fs.watch(settingsFile, { persistent: true }, () => {
+        if (pendingSettingsSync) clearTimeout(pendingSettingsSync);
+        pendingSettingsSync = setTimeout(() => {
+            pendingSettingsSync = null;
+            syncSimulatorFallback();
+        }, 150);
+    });
 }
 
 if (ENABLE_API_SERVER) {
     const server = http.createServer((req, res) => {
         const requestUrl = new URL(req.url || "/", `http://localhost:${HTTP_PORT}`);
         const pathname = requestUrl.pathname || "/";
+        const origin = req.headers.origin || "*";
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+        if (req.method === "OPTIONS") {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
 
         if (pathname === "/api/settings" && req.method === "POST") {
             let body = "";

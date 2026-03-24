@@ -1,0 +1,12 @@
+{
+  "name": "skychopper",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "read": "node scripts/read.js",
+    "read:watch": "nodemon"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
