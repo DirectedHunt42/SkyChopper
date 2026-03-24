@@ -1,16 +1,17 @@
 # SkyChopper Wind Dashboard
 
-A technical, canvas-driven telemetry UI for a wind turbine power system. The front end renders real-time cards from `data/status.json`, drives status indicators for source/battery health, and animates the turbine based on pack voltage. It also exposes a settings modal that persists thresholds to `data/settings.json` using the File System Access API.
+A technical, canvas-driven telemetry UI for a wind turbine power system. The front end renders real-time cards from `data/status.json`, drives status indicators for source/battery health, and animates the turbine based on pack voltage. It also exposes a settings modal that persists thresholds to `data/settings.json` via the local API server.
 
 ## Features
 - HTML5 canvas rendering loop with layout that adapts to viewport width.
 - 1 Hz polling of `data/status.json` with interpolation for smooth transitions.
 - Status LEDs with voltage-range tooltips for source/battery health.
-- Settings modal with persisted JSON writes (`data/settings.json`) via the File System Access API.
+- Settings modal with persisted JSON writes (`data/settings.json`) via the local API server.
+- Logs modal with a live 2-minute voltage chart and CSV table.
 - Light/dark theme swap driven by `prefers-color-scheme`.
 
 ## Quick Start
-1. Run the Pi backend (telemetry + logging):
+1. Run the backend (telemetry + logging + API):
 
 ```powershell
 SERIAL_PORT=/dev/ttyUSB0 node scripts/read.js
@@ -18,14 +19,15 @@ SERIAL_PORT=/dev/ttyUSB0 node scripts/read.js
 
 2. Serve the UI with VS Code Live Server (or any static server).
 
-3. If you want the Reset/Clear buttons to work, run the API server:
+3. If you want auto-restarts on settings changes, use nodemon:
 
 ```powershell
-ENABLE_API_SERVER=1 PORT=8001 node scripts/read.js
+npm install
+npm run read:watch
 ```
 
 ## Settings
-The settings modal edits battery thresholds and writes the JSON to `data/settings.json`. Saving uses the browser File System Access API, so you will need a Chromium-based browser (Chrome, Edge, Brave) and the app should be served from `http://localhost` (or HTTPS).
+The settings modal edits battery thresholds and writes the JSON to `data/settings.json` using the local API server on port 8000. The API server is enabled by default (set `ENABLE_API_SERVER=0` to disable).
 
 ### Settings fields (`data/settings.json`)
 - `target_buck_voltage`: Target buck output voltage.
@@ -35,6 +37,7 @@ The settings modal edits battery thresholds and writes the JSON to `data/setting
 - `batt_empty_voltage`: Battery pack empty voltage.
 - `batt_on_percent`: Battery percentage to turn system on.
 - `batt_off_percent`: Battery percentage to turn system off.
+- `sim_fallback_enabled`: Enable/disable simulator fallback when serial is unavailable.
 
 ## Telemetry Data Contract
 The UI reads `data/status.json` and supports the following fields:
@@ -65,8 +68,19 @@ Missing values are gracefully ignored; cards only render for keys present in the
 - `assets/dark.css`: Dark theme styling.
 - `assets/light.css`: Light theme styling.
 - `scripts/write.js`: Front-end rendering + settings logic.
+- `scripts/read.js`: Telemetry reader + simulator fallback + API server.
 - `data/settings.json`: User-configurable thresholds.
 - `data/status.json`: Live status payload consumed by the UI.
+
+## Raspberry Pi Setup
+Use the provided setup script to configure nginx, the systemd service, and `.local` access:
+
+```bash
+chmod +x setup.sh
+sudo ./setup.sh
+```
+
+See `setup.txt` for full instructions.
 
 ## License
 See `LICENSE.txt`.
