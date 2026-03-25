@@ -877,20 +877,51 @@ if (confirmResetAllOk) {
 }
 if (confirmResetAllCancel) confirmResetAllCancel.addEventListener("click", closeConfirmResetAll);
 
-// NEW: Override switch click handler
 if (overrideSwitch) {
+
+    const buttons = overrideSwitch.querySelectorAll(".switch-btn");
+    const pill = overrideSwitch.querySelector(".slider-pill");
+
+    function movePill(mode) {
+
+        const buttons = overrideSwitch.querySelectorAll(".switch-btn");
+        const pill = overrideSwitch.querySelector(".slider-pill");
+
+        let targetBtn = null;
+
+        buttons.forEach(btn => {
+            if (btn.dataset.mode === mode) {
+                targetBtn = btn;
+            }
+        });
+
+        if (!targetBtn || !pill) return;
+
+        const left = targetBtn.offsetLeft - 3;
+        const width = targetBtn.offsetWidth;
+
+        pill.style.transform = `translateX(${left}px)`;
+        pill.style.width = width + "px";
+
+        buttons.forEach(b => {
+            b.classList.toggle("active", b === targetBtn);
+        });
+    }
+
     overrideSwitch.addEventListener("click", async (event) => {
+
         const btn = event.target.closest("button");
         if (!btn || !btn.dataset.mode) return;
 
         const newMode = btn.dataset.mode;
 
-        // Optimistic UI
-        overrideSwitch.querySelectorAll('.switch-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.mode === newMode);
-        });
+        movePill(newMode);
 
-        const next = { ...settingsState, power_override: newMode };
+        const next = {
+            ...settingsState,
+            power_override: newMode
+        };
+
         applySettings(next);
 
         try {
@@ -899,7 +930,20 @@ if (overrideSwitch) {
         } catch {
             alert("Unable to save power override.");
         }
+
     });
+
+    // update when settings load
+    const oldUpdate = updateOverrideSwitch;
+
+    updateOverrideSwitch = function () {
+
+        if (oldUpdate) oldUpdate();
+
+        const mode = settingsState.power_override || "auto";
+        movePill(mode);
+
+    };
 }
 
 function startPolling() {

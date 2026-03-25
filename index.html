@@ -20,48 +20,41 @@
 
 <!-- THREE-POSITION OVERRIDE SWITCH STYLES -->
 <style>
-    .override-group {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
     .three-switch {
+        position: relative;
         display: inline-flex;
+        align-items: center;
         background: var(--panel, #111827);
         border: 2px solid var(--outline, #1f2937);
         border-radius: 9999px;
-        overflow: hidden;
-        box-shadow: 0 1px 3px rgba(0,0,0,.15);
+        padding: 3px;
     }
-    .three-switch .switch-btn {
-        padding: 6px 18px;
+
+    .switch-btn {
+        position: relative;
+        z-index: 2;
+        padding: 6px 14px;
         font-size: 11px;
         font-weight: 700;
         color: var(--muted, #94a3b8);
         background: transparent;
         border: none;
         cursor: pointer;
-        transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .three-switch .switch-btn.active {
-        background: var(--accent, #38bdf8);
+
+    .switch-btn.active {
         color: #0f172a;
     }
-    .three-switch .switch-btn:not(:last-child) {
-        border-right: 2px solid var(--outline, #1f2937);
-    }
-    @media (prefers-color-scheme: light) {
-        .three-switch {
-            background: #f1f5f9;
-            border-color: #e2e8f0;
-        }
-        .three-switch .switch-btn {
-            color: #64748b;
-        }
-        .three-switch .switch-btn.active {
-            background: #0ea5e9;
-            color: #fff;
-        }
+
+    .slider-pill {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        height: calc(100% - 6px);
+        background: var(--accent, #38bdf8);
+        border-radius: 9999px;
+        transition: all .25s ease;
+        width: 20px;
     }
 </style>
 </head>
@@ -79,9 +72,11 @@
                 <!-- NEW: Three-position power override switch -->
                 <div class="override-group">
                     <div class="three-switch" id="override-switch">
-                        <button type="button" data-mode="off" class="switch-btn" title="Force battery usage">ON</button>
-                        <button type="button" data-mode="auto" class="switch-btn active" title="Auto mode">AUTO</button>
-                        <button type="button" data-mode="on" class="switch-btn" title="Force source usage">OFF</button>
+                        <div class="slider-pill"></div>
+
+                        <button type="button" data-mode="off" class="switch-btn">BATT</button>
+                        <button type="button" data-mode="auto" class="switch-btn active">AUTO</button>
+                        <button type="button" data-mode="on" class="switch-btn">SOURCE</button>
                     </div>
                 </div>
             </div>

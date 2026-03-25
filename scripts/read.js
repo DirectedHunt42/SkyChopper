@@ -137,9 +137,13 @@ function computeDecision(telemetry, prev) {
     if (!systemOn && clampedPercent >= onPercent) systemOn = true;
     if (systemOn && clampedPercent <= offPercent) systemOn = false;
 
-    // ← UPDATED: Prefer battery whenever it is above batt_on_percent (min on value)
-    // System still uses the original hysteresis for "system_on".
-    // In AUTO mode we now force battery when battery is sufficiently charged.
+    // ← UPDATED TO YOUR EXACT SPECIFICATION
+    // Battery "in range / above"   = >= batt_on_percent  → always prefer battery
+    // Battery "below range"        = <= batt_off_percent → use source ONLY if source is in range
+    // Battery <= 10%               → ALWAYS use source (critical low override)
+    // Source "in range"            = source_expected_min_v <= sourceV <= source_expected_max_v
+    // Hysteresis band (off% < batt% < on%) is treated as "good" → prefer battery
+    // system_on hysteresis is unchanged (no flickering)
     const override = settings.power_override || "auto";
     let useSource;
     if (override === "off") {
@@ -147,13 +151,19 @@ function computeDecision(telemetry, prev) {
     } else if (override === "on") {
         useSource = true;
     } else {
-        // AUTO mode – battery priority
-        if (clampedPercent >= onPercent) {
-            useSource = false;                       // always prefer battery when above min on value
-        } else if (systemOn && sourceV > 0.1 && sourceV >= sourceMin) {
-            useSource = true;                        // fall back to source only when battery is getting low
+        // AUTO mode – exact logic you requested
+        if (clampedPercent <= 10) {
+            useSource = true;                                      // Batt at 10% or below → always source
+        } else if (clampedPercent >= onPercent) {
+            useSource = false;                                     // Batt in range / above → use batt
+        } else if (clampedPercent > offPercent) {
+            useSource = false;                                     // Hysteresis band → still treat as good, use batt
         } else {
-            useSource = false;
+            // Batt below range (≤ offPercent and >10%)
+            const sourceIsGood = (sourceV > 0.1 &&
+                                  sourceV >= sourceMin &&
+                                  sourceV <= sourceMax);
+            useSource = sourceIsGood;                              // use source only if source in range, else batt
         }
     }
 
@@ -310,20 +320,25 @@ function generateData() {
     if (!systemOn && percent >= onPercent) systemOn = true;
     if (systemOn && percent <= offPercent) systemOn = false;
 
-    // ← UPDATED: Same battery-preference logic as the real serial path
+    // ← UPDATED TO YOUR EXACT SPECIFICATION (identical logic as computeDecision)
     const override = settings.power_override || "auto";
     if (override === "off") {
         useSource = false;
     } else if (override === "on") {
         useSource = true;
     } else {
-        // AUTO mode – battery priority
-        if (percent >= onPercent) {
-            useSource = false;                       // always prefer battery when above min on value
-        } else if (systemOn && sourceV > 0.1 && sourceV >= sourceMin) {
-            useSource = true;                        // fall back to source only when battery is getting low
+        if (percent <= 10) {
+            useSource = true;                                      // Batt at 10% or below → always source
+        } else if (percent >= onPercent) {
+            useSource = false;                                     // Batt in range / above → use batt
+        } else if (percent > offPercent) {
+            useSource = false;                                     // Hysteresis band → still treat as good, use batt
         } else {
-            useSource = false;
+            // Batt below range (≤ offPercent and >10%)
+            const sourceIsGood = (sourceV > 0.1 &&
+                                  sourceV >= sourceMin &&
+                                  sourceV <= sourceMax);
+            useSource = sourceIsGood;                              // use source only if source in range, else batt
         }
     }
 
