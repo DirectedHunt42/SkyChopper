@@ -137,14 +137,24 @@ function computeDecision(telemetry, prev) {
     if (!systemOn && clampedPercent >= onPercent) systemOn = true;
     if (systemOn && clampedPercent <= offPercent) systemOn = false;
 
-    let useSource = systemOn && sourceV > 0.1 && sourceV >= sourceMin;
-
-    // ← NEW: Power override (OFF / AUTO / ON)
+    // ← UPDATED: Prefer battery whenever it is above batt_on_percent (min on value)
+    // System still uses the original hysteresis for "system_on".
+    // In AUTO mode we now force battery when battery is sufficiently charged.
     const override = settings.power_override || "auto";
+    let useSource;
     if (override === "off") {
         useSource = false;
     } else if (override === "on") {
         useSource = true;
+    } else {
+        // AUTO mode – battery priority
+        if (clampedPercent >= onPercent) {
+            useSource = false;                       // always prefer battery when above min on value
+        } else if (systemOn && sourceV > 0.1 && sourceV >= sourceMin) {
+            useSource = true;                        // fall back to source only when battery is getting low
+        } else {
+            useSource = false;
+        }
     }
 
     return {
@@ -300,18 +310,21 @@ function generateData() {
     if (!systemOn && percent >= onPercent) systemOn = true;
     if (systemOn && percent <= offPercent) systemOn = false;
 
-    if (sourceV <= 0.1) {
-        useSource = false;
-    } else {
-        useSource = systemOn;
-    }
-
-    // ← NEW: Power override (same logic as serial)
+    // ← UPDATED: Same battery-preference logic as the real serial path
     const override = settings.power_override || "auto";
     if (override === "off") {
         useSource = false;
     } else if (override === "on") {
         useSource = true;
+    } else {
+        // AUTO mode – battery priority
+        if (percent >= onPercent) {
+            useSource = false;                       // always prefer battery when above min on value
+        } else if (systemOn && sourceV > 0.1 && sourceV >= sourceMin) {
+            useSource = true;                        // fall back to source only when battery is getting low
+        } else {
+            useSource = false;
+        }
     }
 
     const buckNoise = (Math.random() - 0.5) * 0.08;
