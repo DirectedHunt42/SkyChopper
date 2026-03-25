@@ -16,7 +16,8 @@ const defaultSettings = {
     batt_empty_voltage: 9.0,
     batt_on_percent: 80,
     batt_off_percent: 60,
-    sim_fallback_enabled: true
+    sim_fallback_enabled: true,
+    power_override: "auto"          // ← NEW
 };
 
 // Default status if missing
@@ -56,14 +57,13 @@ if (!fs.existsSync(logFile)) {
 }
 
 // ===== Serial bridge (preferred) =====
-// Uses `serialport` if installed. Otherwise falls back to simulator mode.
 const SERIAL_PORT = process.env.SERIAL_PORT || "";
 const SERIAL_BAUD = Number.parseInt(process.env.SERIAL_BAUD || "115200", 10);
 const HTTP_PORT = Number.parseInt(process.env.PORT || "8000", 10);
 const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER !== "0";
 
 const LOG_INTERVAL_MS = 5000;
-const LOG_MAX_LINES = 1000000; // 100k lines ~ 10MB, adjust as needed
+const LOG_MAX_LINES = 1000000;
 let lastLogAt = 0;
 let logLineCount = 0;
 let simulatorTimer = null;
@@ -131,13 +131,21 @@ function computeDecision(telemetry, prev) {
     const battV = Number.isFinite(telemetry.batt_voltage) ? telemetry.batt_voltage : prev.batt_voltage;
     const sourceV = Number.isFinite(telemetry.source_voltage) ? telemetry.source_voltage : prev.source_voltage;
     const battPercent = ((battV - emptyV) / (fullV - emptyV)) * 100;
-    const clampedPercent = clamp(battPercent, 0, 100);
+    const clampedPercent = Math.max(0, Math.min(100, battPercent));
 
     let systemOn = prev.system_on;
     if (!systemOn && clampedPercent >= onPercent) systemOn = true;
     if (systemOn && clampedPercent <= offPercent) systemOn = false;
 
-    const useSource = systemOn && sourceV > 0.1 && sourceV >= sourceMin;
+    let useSource = systemOn && sourceV > 0.1 && sourceV >= sourceMin;
+
+    // ← NEW: Power override (OFF / AUTO / ON)
+    const override = settings.power_override || "auto";
+    if (override === "off") {
+        useSource = false;
+    } else if (override === "on") {
+        useSource = true;
+    }
 
     return {
         settings,
@@ -147,7 +155,8 @@ function computeDecision(telemetry, prev) {
         systemOn,
         useSource,
         sourceMin,
-        sourceMax
+        sourceMax,
+        arduinoConnected: true
     };
 }
 
@@ -187,10 +196,8 @@ function clearLogs() {
 }
 
 function startSerialBridge() {
-    let SerialPort;
-    let ReadlineParser;
+    let SerialPort, ReadlineParser;
     try {
-        // eslint-disable-next-line global-require
         ({ SerialPort, ReadlineParser } = require("serialport"));
     } catch (err) {
         console.log("serialport not installed; falling back to simulator mode.");
@@ -238,19 +245,13 @@ function startSerialBridge() {
         }
     });
 
-    port.on("open", () => {
-        console.log(`Serial bridge running on ${SERIAL_PORT} @ ${SERIAL_BAUD}`);
-    });
-
-    port.on("error", (err) => {
-        console.log("Serial error:", err.message);
-    });
+    port.on("open", () => console.log(`Serial bridge running on ${SERIAL_PORT} @ ${SERIAL_BAUD}`));
+    port.on("error", (err) => console.log("Serial error:", err.message));
 
     return true;
 }
 
 // ===== Simulator fallback =====
-// State memory for hysteresis
 let systemOn = defaultStatus.system_on;
 let useSource = defaultStatus.use_source;
 let battV = defaultStatus.batt_voltage;
@@ -276,12 +277,8 @@ function generateData() {
     const battStartV = emptyV + (fullV - emptyV) * (onPercent / 100);
     const battStopV = emptyV + (fullV - emptyV) * (offPercent / 100);
 
-    // Occasionally toggle source presence for realism
-    if (Math.random() < 0.02) {
-        sourcePresent = !sourcePresent;
-    }
+    if (Math.random() < 0.02) sourcePresent = !sourcePresent;
 
-    // Source voltage around target with slight noise, sometimes off or slightly out of range
     if (!sourcePresent) {
         sourceV = 0;
     } else {
@@ -293,27 +290,30 @@ function generateData() {
         sourceV = sourceV + (sourceTarget - sourceV) * 0.1;
     }
 
-    // Battery voltage drift based on load/source
     const dischargeRate = systemOn && !useSource ? -0.015 : -0.003;
     const chargeRate = useSource ? 0.01 : 0.0;
     battV = clamp(battV + dischargeRate + chargeRate + (Math.random() - 0.5) * 0.01, emptyV, fullV);
 
-    // Calculate battery %
     let percent = ((battV - emptyV) / (fullV - emptyV)) * 100;
     percent = clamp(percent, 0, 100);
 
-    // Hysteresis ON/OFF
     if (!systemOn && percent >= onPercent) systemOn = true;
     if (systemOn && percent <= offPercent) systemOn = false;
 
-    // Source logic
     if (sourceV <= 0.1) {
         useSource = false;
     } else {
         useSource = systemOn;
     }
 
-    // Buck voltage around target with gentle noise
+    // ← NEW: Power override (same logic as serial)
+    const override = settings.power_override || "auto";
+    if (override === "off") {
+        useSource = false;
+    } else if (override === "on") {
+        useSource = true;
+    }
+
     const buckNoise = (Math.random() - 0.5) * 0.08;
     buckV = clamp(buckV + (targetBuck - buckV) * 0.2 + buckNoise, targetBuck - 0.4, targetBuck + 0.4);
 
@@ -360,7 +360,7 @@ if (!startSerialBridge()) {
         const decision = computeDecision(defaultStatus, defaultStatus);
         decision.arduinoConnected = false;
         writeStatus(defaultStatus, decision);
-        console.log("Simulator fallback disabled; waiting for serial data.");
+        console.log("Simulator fallback disabled.");
     };
 
     const syncSimulatorFallback = () => {
@@ -368,11 +368,7 @@ if (!startSerialBridge()) {
         const simEnabled = typeof settings.sim_fallback_enabled === "boolean"
             ? settings.sim_fallback_enabled
             : defaultSettings.sim_fallback_enabled;
-        if (simEnabled) {
-            startSimulator();
-        } else {
-            stopSimulator();
-        }
+        if (simEnabled) startSimulator(); else stopSimulator();
     };
 
     syncSimulatorFallback();
@@ -403,16 +399,11 @@ if (ENABLE_API_SERVER) {
 
         if (pathname === "/api/settings" && req.method === "POST") {
             let body = "";
-            req.on("data", (chunk) => {
-                body += chunk;
-            });
+            req.on("data", (chunk) => { body += chunk; });
             req.on("end", () => {
                 try {
                     const payload = JSON.parse(body || "{}");
-                    const nextSettings = {
-                        ...defaultSettings,
-                        ...payload
-                    };
+                    const nextSettings = { ...defaultSettings, ...payload };
                     ensureDataFolder();
                     fs.writeFileSync(settingsFile, JSON.stringify(nextSettings, null, 2));
                     res.writeHead(200, { "Content-Type": "application/json" });

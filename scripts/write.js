@@ -18,7 +18,7 @@ const logsBackdrop = document.getElementById('logs-backdrop');
 const closeLogs = document.getElementById('close-logs');
 const logTableWrap = document.getElementById('log-table-wrap');
 const logTableBody = document.getElementById('log-table-body');
-const logLinesCount = document.getElementById('log-lines-count');   // ← NEW: for live log count
+const logLinesCount = document.getElementById('log-lines-count');
 let logAutoRefreshTimer = null;
 const confirmBackdrop = document.getElementById('confirm-backdrop');
 const confirmCancel = document.getElementById('confirm-cancel');
@@ -42,6 +42,9 @@ const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
 const LOG_LEFT_HIDE_MS = 10000;
+
+// NEW: Override switch element
+const overrideSwitch = document.getElementById('override-switch');
 
 const defaultStatus = {
     batt_voltage: 0,
@@ -94,7 +97,8 @@ const settingsDefaults = {
     batt_empty_voltage: 9.0,
     batt_on_percent: 80,
     batt_off_percent: 60,
-    sim_fallback_enabled: true
+    sim_fallback_enabled: true,
+    power_override: "auto"          // ← NEW
 };
 
 let settingsState = { ...settingsDefaults };
@@ -104,6 +108,7 @@ let thresholds = {
     sourceExpectedMinV: settingsState.source_expected_min_v,
     sourceExpectedMaxV: settingsState.source_expected_max_v
 };
+
 function applyStatusLevel(dotEl, level) {
     if (!dotEl) return;
     dotEl.className = "status-dot" + level;
@@ -215,6 +220,15 @@ function fillSettingsForm() {
     }
 }
 
+// NEW: Update the visual state of the three-switch
+function updateOverrideSwitch() {
+    if (!overrideSwitch) return;
+    const mode = settingsState.power_override || "auto";
+    overrideSwitch.querySelectorAll('.switch-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+}
+
 function parseNum(value, fallback) {
     const n = Number.parseFloat(value);
     return Number.isFinite(n) ? n : fallback;
@@ -245,6 +259,7 @@ async function loadSettings() {
     }
 
     fillSettingsForm();
+    updateOverrideSwitch();   // ← NEW
 }
 
 function openSettingsModal() {
@@ -475,12 +490,10 @@ async function loadLogTable() {
             ? lines.slice(1).map((line) => line.split(","))
             : [];
 
-        // ←←← LIVE LOG COUNT DISPLAY
         if (logLinesCount) {
             const count = rows.length;
             logLinesCount.textContent = `${count.toLocaleString()} / 1 000 000 log lines used`;
         }
-        // ←←← END LIVE COUNT
 
         const shouldStickToBottom = logTableWrap
             ? (logTableWrap.scrollHeight - logTableWrap.scrollTop - logTableWrap.clientHeight) < 24
@@ -507,7 +520,6 @@ async function loadLogTable() {
     }
 }
 
-// Fetch JSON
 async function updateData() {
     try {
         const res = await fetch("data/status.json", { cache: "no-store" });
@@ -569,7 +581,6 @@ async function updateData() {
     }
 }
 
-// Draw dashboard
 function draw() {
     const width = canvas.width / dpr;
     const height = canvas.height / dpr;
@@ -583,7 +594,6 @@ function draw() {
     const gap = isNarrow ? 10 : 14;
     const cardH = isNarrow ? 58 : 64;
 
-    // Data blocks
     const getSourceLevel = () => {
         if (!Number.isFinite(status.source_voltage) || status.source_voltage <= 0.1) {
             return "danger";
@@ -644,10 +654,7 @@ function draw() {
         });
     }
     if (availableKeys.has("use_source") || availableKeys.has("system_on")) {
-        const expMin = thresholds.sourceExpectedMinV;
-        const isUsingSource = Boolean(status.use_source)
-            && Number.isFinite(status.source_voltage)
-            && status.source_voltage >= expMin;
+        const isUsingSource = Boolean(status.use_source);
         blocks.push({
             label: "Power Mode",
             value: `${isUsingSource ? "SOURCE" : "BATT"}`,
@@ -679,7 +686,6 @@ function draw() {
     let centerX = width / 2;
     let centerY = height * (isNarrow ? 0.28 : 0.45);
 
-    // Layout cards and adjust turbine center to avoid overlap
     const positions = [];
     if (blocks.length > 0) {
         if (isNarrow) {
@@ -712,9 +718,7 @@ function draw() {
             const bottomCount = blocks.length - topCount;
 
             const layoutRow = (count, y) => {
-                if (count === 0) {
-                    return [];
-                }
+                if (count === 0) return [];
                 const maxCardW = 180;
                 const cardW = Math.min(maxCardW, Math.floor((width - pad * 2 - gap * (count - 1)) / count));
                 const rowW = count * cardW + (count - 1) * gap;
@@ -788,36 +792,18 @@ function renderLoop() {
     requestAnimationFrame(renderLoop);
 }
 
-if (openSettings) {
-    openSettings.addEventListener("click", () => {
-        fillSettingsForm();
-        openSettingsModal();
-    });
-}
-
+// Event listeners (existing + new override switch)
+if (openSettings) openSettings.addEventListener("click", () => { fillSettingsForm(); openSettingsModal(); });
 if (openLogs) {
     openLogs.addEventListener("click", () => {
         openLogsModal();
         resizeLogChart();
         loadLogTable();
-        if (!logAutoRefreshTimer) {
-            logAutoRefreshTimer = setInterval(loadLogTable, 5000);
-        }
+        if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(loadLogTable, 5000);
     });
 }
-
-if (closeLogs) {
-    closeLogs.addEventListener("click", closeLogsModal);
-}
-
-if (logsBackdrop) {
-    logsBackdrop.addEventListener("click", (event) => {
-        if (event.target === logsBackdrop) {
-            closeLogsModal();
-        }
-    });
-}
-
+if (closeLogs) closeLogs.addEventListener("click", closeLogsModal);
+if (logsBackdrop) logsBackdrop.addEventListener("click", (e) => { if (e.target === logsBackdrop) closeLogsModal(); });
 if (downloadLog) {
     downloadLog.addEventListener("click", async () => {
         try {
@@ -826,29 +812,13 @@ if (downloadLog) {
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = url;
-            a.download = "log.csv";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch {
-            alert("Unable to download log.csv. Make sure the server is running.");
-        }
+            a.href = url; a.download = "log.csv";
+            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        } catch { alert("Unable to download log.csv."); }
     });
 }
-
-if (closeSettings) {
-    closeSettings.addEventListener("click", closeSettingsModal);
-}
-
-if (settingsBackdrop) {
-    settingsBackdrop.addEventListener("click", (event) => {
-        if (event.target === settingsBackdrop) {
-            closeSettingsModal();
-        }
-    });
-}
+if (closeSettings) closeSettings.addEventListener("click", closeSettingsModal);
+if (settingsBackdrop) settingsBackdrop.addEventListener("click", (e) => { if (e.target === settingsBackdrop) closeSettingsModal(); });
 
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener("click", () => {
@@ -860,147 +830,76 @@ if (saveSettingsBtn) {
             sim_fallback_enabled: Boolean(inputSimFallback?.checked)
         };
         applySettings(next);
-        writeSettingsToFile()
-            .then(() => {
-                updateData();
-                closeSettingsModal();
-            })
-            .catch(() => {
-                alert("Unable to save settings. Make sure the API server is running (set ENABLE_API_SERVER=1).");
-            });
+        writeSettingsToFile().then(() => { updateData(); closeSettingsModal(); }).catch(() => alert("Unable to save settings."));
     });
 }
 
-function openConfirm() {
-    if (!confirmBackdrop) return;
-    confirmBackdrop.classList.add("open");
-    confirmBackdrop.setAttribute("aria-hidden", "false");
-}
+function openConfirm() { if (confirmBackdrop) { confirmBackdrop.classList.add("open"); confirmBackdrop.setAttribute("aria-hidden", "false"); } }
+function closeConfirm() { if (confirmBackdrop) { confirmBackdrop.classList.remove("open"); confirmBackdrop.setAttribute("aria-hidden", "true"); } }
+function openConfirmClearLogs() { if (confirmClearLogs) { confirmClearLogs.classList.add("open"); confirmClearLogs.setAttribute("aria-hidden", "false"); } }
+function closeConfirmClearLogs() { if (confirmClearLogs) { confirmClearLogs.classList.remove("open"); confirmClearLogs.setAttribute("aria-hidden", "true"); } }
+function openConfirmResetAll() { if (confirmResetAll) { confirmResetAll.classList.add("open"); confirmResetAll.setAttribute("aria-hidden", "false"); } }
+function closeConfirmResetAll() { if (confirmResetAll) { confirmResetAll.classList.remove("open"); confirmResetAll.setAttribute("aria-hidden", "true"); } }
 
-function closeConfirm() {
-    if (!confirmBackdrop) return;
-    confirmBackdrop.classList.remove("open");
-    confirmBackdrop.setAttribute("aria-hidden", "true");
-}
-
-function openConfirmClearLogs() {
-    if (!confirmClearLogs) return;
-    confirmClearLogs.classList.add("open");
-    confirmClearLogs.setAttribute("aria-hidden", "false");
-}
-
-function closeConfirmClearLogs() {
-    if (!confirmClearLogs) return;
-    confirmClearLogs.classList.remove("open");
-    confirmClearLogs.setAttribute("aria-hidden", "true");
-}
-
-function openConfirmResetAll() {
-    if (!confirmResetAll) return;
-    confirmResetAll.classList.add("open");
-    confirmResetAll.setAttribute("aria-hidden", "false");
-}
-
-function closeConfirmResetAll() {
-    if (!confirmResetAll) return;
-    confirmResetAll.classList.remove("open");
-    confirmResetAll.setAttribute("aria-hidden", "true");
-}
-
-if (resetSettingsBtn) {
-    resetSettingsBtn.addEventListener("click", openConfirm);
-}
-
-if (resetAllBtn) {
-    resetAllBtn.addEventListener("click", openConfirmResetAll);
-}
-
-if (clearLogs) {
-    clearLogs.addEventListener("click", openConfirmClearLogs);
-}
-
-if (confirmCancel) {
-    confirmCancel.addEventListener("click", closeConfirm);
-}
-
-if (confirmBackdrop) {
-    confirmBackdrop.addEventListener("click", (event) => {
-        if (event.target === confirmBackdrop) {
-            closeConfirm();
-        }
-    });
-}
-
-if (confirmClearLogs) {
-    confirmClearLogs.addEventListener("click", (event) => {
-        if (event.target === confirmClearLogs) {
-            closeConfirmClearLogs();
-        }
-    });
-}
-
-if (confirmResetAll) {
-    confirmResetAll.addEventListener("click", (event) => {
-        if (event.target === confirmResetAll) {
-            closeConfirmResetAll();
-        }
-    });
-}
+if (resetSettingsBtn) resetSettingsBtn.addEventListener("click", openConfirm);
+if (resetAllBtn) resetAllBtn.addEventListener("click", openConfirmResetAll);
+if (clearLogs) clearLogs.addEventListener("click", openConfirmClearLogs);
+if (confirmCancel) confirmCancel.addEventListener("click", closeConfirm);
+if (confirmBackdrop) confirmBackdrop.addEventListener("click", (e) => { if (e.target === confirmBackdrop) closeConfirm(); });
+if (confirmClearLogs) confirmClearLogs.addEventListener("click", (e) => { if (e.target === confirmClearLogs) closeConfirmClearLogs(); });
+if (confirmResetAll) confirmResetAll.addEventListener("click", (e) => { if (e.target === confirmResetAll) closeConfirmResetAll(); });
 
 if (confirmReset) {
     confirmReset.addEventListener("click", () => {
         applySettings(settingsDefaults);
         fillSettingsForm();
-        writeSettingsToFile()
-            .then(() => {
-                updateData();
-                closeConfirm();
-                closeSettingsModal();
-            })
-            .catch(() => {
-                alert("Unable to reset settings. Check file permissions.");
-            });
+        writeSettingsToFile().then(() => { updateData(); closeConfirm(); closeSettingsModal(); }).catch(() => alert("Unable to reset settings."));
     });
 }
 
 async function postAction(path) {
     const res = await fetch(`${API_BASE}${path}`, { method: "POST" });
-    if (!res.ok) {
-        throw new Error("Request failed");
-    }
+    if (!res.ok) throw new Error("Request failed");
 }
 
 if (confirmClearLogsOk) {
     confirmClearLogsOk.addEventListener("click", async () => {
-        try {
-            await postAction("/api/clear-logs");
-            closeConfirmClearLogs();
-            closeLogsModal();
-            loadLogTable();
-        } catch {
-            alert("Unable to clear logs. Make sure the backend is running.");
-        }
+        try { await postAction("/api/clear-logs"); closeConfirmClearLogs(); closeLogsModal(); loadLogTable(); }
+        catch { alert("Unable to clear logs."); }
     });
 }
-
-if (confirmClearLogsCancel) {
-    confirmClearLogsCancel.addEventListener("click", closeConfirmClearLogs);
-}
-
+if (confirmClearLogsCancel) confirmClearLogsCancel.addEventListener("click", closeConfirmClearLogs);
 if (confirmResetAllOk) {
     confirmResetAllOk.addEventListener("click", async () => {
-        try {
-            await postAction("/api/reset-all");
-            closeConfirmResetAll();
-            closeSettingsModal();
-        } catch {
-            alert("Unable to reset all data. Make sure the backend is running.");
-        }
+        try { await postAction("/api/reset-all"); closeConfirmResetAll(); closeSettingsModal(); }
+        catch { alert("Unable to reset all data."); }
     });
 }
+if (confirmResetAllCancel) confirmResetAllCancel.addEventListener("click", closeConfirmResetAll);
 
-if (confirmResetAllCancel) {
-    confirmResetAllCancel.addEventListener("click", closeConfirmResetAll);
+// NEW: Override switch click handler
+if (overrideSwitch) {
+    overrideSwitch.addEventListener("click", async (event) => {
+        const btn = event.target.closest("button");
+        if (!btn || !btn.dataset.mode) return;
+
+        const newMode = btn.dataset.mode;
+
+        // Optimistic UI
+        overrideSwitch.querySelectorAll('.switch-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.mode === newMode);
+        });
+
+        const next = { ...settingsState, power_override: newMode };
+        applySettings(next);
+
+        try {
+            await writeSettingsToFile();
+            updateData();
+        } catch {
+            alert("Unable to save power override.");
+        }
+    });
 }
 
 function startPolling() {
@@ -1017,13 +916,9 @@ renderLoop();
 let resizeTimer;
 window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-        resizeCanvas();
-        resizeLogChart();
-    }, 80);
+    resizeTimer = setTimeout(() => { resizeCanvas(); resizeLogChart(); }, 80);
 });
 
-// Prevent accidental reloads (F5 / Ctrl+R / Cmd+R)
 window.addEventListener("keydown", (event) => {
     const key = event.key.toLowerCase();
     if (key === "f5" || ((event.ctrlKey || event.metaKey) && key === "r")) {

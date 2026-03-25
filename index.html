@@ -17,6 +17,53 @@
         themeLink.href = 'assets/light.css';
     }
 </script>
+
+<!-- THREE-POSITION OVERRIDE SWITCH STYLES -->
+<style>
+    .override-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .three-switch {
+        display: inline-flex;
+        background: var(--panel, #111827);
+        border: 2px solid var(--outline, #1f2937);
+        border-radius: 9999px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,.15);
+    }
+    .three-switch .switch-btn {
+        padding: 6px 18px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted, #94a3b8);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .three-switch .switch-btn.active {
+        background: var(--accent, #38bdf8);
+        color: #0f172a;
+    }
+    .three-switch .switch-btn:not(:last-child) {
+        border-right: 2px solid var(--outline, #1f2937);
+    }
+    @media (prefers-color-scheme: light) {
+        .three-switch {
+            background: #f1f5f9;
+            border-color: #e2e8f0;
+        }
+        .three-switch .switch-btn {
+            color: #64748b;
+        }
+        .three-switch .switch-btn.active {
+            background: #0ea5e9;
+            color: #fff;
+        }
+    }
+</style>
 </head>
 
 <body>
@@ -28,6 +75,15 @@
             <div class="hero-actions">
                 <button class="settings-btn" id="open-settings" type="button">Settings</button>
                 <button class="settings-btn" id="open-logs" type="button">Logs</button>
+                
+                <!-- NEW: Three-position power override switch -->
+                <div class="override-group">
+                    <div class="three-switch" id="override-switch">
+                        <button type="button" data-mode="off" class="switch-btn">OFF</button>
+                        <button type="button" data-mode="auto" class="switch-btn active">AUTO</button>
+                        <button type="button" data-mode="on" class="switch-btn">ON</button>
+                    </div>
+                </div>
             </div>
         </div>
     </header>
@@ -58,6 +114,7 @@
         </div>
     </div>
 
+    <!-- (All your existing modals stay exactly the same) -->
     <div class="modal-backdrop" id="settings-backdrop" aria-hidden="true">
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
             <div class="modal-header">
