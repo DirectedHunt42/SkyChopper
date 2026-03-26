@@ -10,6 +10,7 @@ const openLogs = document.getElementById('open-logs');
 const downloadLog = document.getElementById('download-log');
 const clearLogs = document.getElementById('clear-logs');
 const settingsBackdrop = document.getElementById('settings-backdrop');
+const statusBuck = document.getElementById('status-buck');
 const closeSettings = document.getElementById('close-settings');
 const saveSettingsBtn = document.getElementById('save-settings');
 const resetSettingsBtn = document.getElementById('reset-settings');
@@ -574,6 +575,28 @@ async function updateData() {
             if (arduinoItem) {
                 arduinoItem.setAttribute("data-tooltip", tip);
                 arduinoItem.setAttribute("aria-label", tip);
+            }
+        }
+        if (statusBuck) {
+            const buckV = Number.isFinite(d.buck_voltage) ? d.buck_voltage : status.buck_voltage;
+            const expMin = Number.isFinite(d.source_expected_min_v) ? d.source_expected_min_v : thresholds.sourceExpectedMinV;
+            const expMax = Number.isFinite(d.source_expected_max_v) ? d.source_expected_max_v : thresholds.sourceExpectedMaxV;
+            let level = " danger";
+            if (Number.isFinite(buckV) && buckV > 0.1) {
+                if (buckV > expMax) {
+                    level = " warn";
+                } else if (buckV >= expMin) {
+                    level = " on";
+                } else {
+                    level = " danger";
+                }
+            }
+            applyStatusLevel(statusBuck, level);
+            const buckTip = `Buck ${buckV.toFixed(2)} V (target ${expMin.toFixed(1)}-${expMax.toFixed(1)} V)`;
+            const buckItem = statusBuck.closest(".status-item");
+            if (buckItem) {
+                buckItem.setAttribute("data-tooltip", buckTip);
+                buckItem.setAttribute("aria-label", buckTip);
             }
         }
     } catch (err) {
