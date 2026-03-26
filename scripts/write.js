@@ -43,6 +43,9 @@ const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
 const LOG_LEFT_HIDE_MS = 10000;
+const confirmSim = document.getElementById('confirm-sim');
+const confirmSimCancel = document.getElementById('confirm-sim-cancel');
+const confirmSimOk = document.getElementById('confirm-sim-ok');
 
 // NEW: Override switch element
 const overrideSwitch = document.getElementById('override-switch');
@@ -815,7 +818,7 @@ function renderLoop() {
     requestAnimationFrame(renderLoop);
 }
 
-// Event listeners (existing + new override switch)
+// Event listeners
 if (openSettings) openSettings.addEventListener("click", () => { fillSettingsForm(); openSettingsModal(); });
 if (openLogs) {
     openLogs.addEventListener("click", () => {
@@ -845,6 +848,7 @@ if (settingsBackdrop) settingsBackdrop.addEventListener("click", (e) => { if (e.
 
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener("click", () => {
+
         const next = {
             batt_full_voltage: parseNum(inputPackFull?.value, settingsState.batt_full_voltage),
             batt_empty_voltage: parseNum(inputPackEmpty?.value, settingsState.batt_empty_voltage),
@@ -852,8 +856,19 @@ if (saveSettingsBtn) {
             batt_off_percent: parseNum(inputOffPercent?.value, settingsState.batt_off_percent),
             sim_fallback_enabled: Boolean(inputSimFallback?.checked)
         };
+
+        const enablingSim = next.sim_fallback_enabled && !settingsState.sim_fallback_enabled;
+
+        if (enablingSim) {
+            window._pendingSettings = next;
+            openConfirmSim();
+            return;
+        }
+
         applySettings(next);
-        writeSettingsToFile().then(() => { updateData(); closeSettingsModal(); }).catch(() => alert("Unable to save settings."));
+        writeSettingsToFile()
+            .then(() => { updateData(); closeSettingsModal(); })
+            .catch(() => alert("Unable to save settings."));
     });
 }
 
@@ -863,6 +878,19 @@ function openConfirmClearLogs() { if (confirmClearLogs) { confirmClearLogs.class
 function closeConfirmClearLogs() { if (confirmClearLogs) { confirmClearLogs.classList.remove("open"); confirmClearLogs.setAttribute("aria-hidden", "true"); } }
 function openConfirmResetAll() { if (confirmResetAll) { confirmResetAll.classList.add("open"); confirmResetAll.setAttribute("aria-hidden", "false"); } }
 function closeConfirmResetAll() { if (confirmResetAll) { confirmResetAll.classList.remove("open"); confirmResetAll.setAttribute("aria-hidden", "true"); } }
+function openConfirmSim() {
+    if (confirmSim) {
+        confirmSim.classList.add("open");
+        confirmSim.setAttribute("aria-hidden", "false");
+    }
+}
+
+function closeConfirmSim() {
+    if (confirmSim) {
+        confirmSim.classList.remove("open");
+        confirmSim.setAttribute("aria-hidden", "true");
+    }
+}
 
 if (resetSettingsBtn) resetSettingsBtn.addEventListener("click", openConfirm);
 if (resetAllBtn) resetAllBtn.addEventListener("click", openConfirmResetAll);
@@ -898,6 +926,41 @@ if (confirmResetAllOk) {
         catch { alert("Unable to reset all data."); }
     });
 }
+
+if (confirmSimCancel) {
+    confirmSimCancel.addEventListener("click", () => {
+        closeConfirmSim();
+        window._pendingSettings = null;
+    });
+}
+
+if (confirmSimOk) {
+    confirmSimOk.addEventListener("click", () => {
+        if (!window._pendingSettings) return;
+
+        applySettings(window._pendingSettings);
+
+        writeSettingsToFile()
+            .then(() => {
+                updateData();
+                closeConfirmSim();
+                closeSettingsModal();
+            })
+            .catch(() => alert("Unable to save settings."));
+
+        window._pendingSettings = null;
+    });
+}
+
+if (confirmSim) {
+    confirmSim.addEventListener("click", (e) => {
+        if (e.target === confirmSim) {
+            closeConfirmSim();
+            window._pendingSettings = null;
+        }
+    });
+}
+
 if (confirmResetAllCancel) confirmResetAllCancel.addEventListener("click", closeConfirmResetAll);
 
 if (overrideSwitch) {

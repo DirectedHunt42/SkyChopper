@@ -16,7 +16,7 @@ const defaultSettings = {
     batt_empty_voltage: 9.0,
     batt_on_percent: 80,
     batt_off_percent: 60,
-    sim_fallback_enabled: true,
+    sim_fallback_enabled: false,
     power_override: "auto"          // ← NEW
 };
 

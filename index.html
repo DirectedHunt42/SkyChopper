@@ -11,7 +11,6 @@
 
 <!-- Load dark/light CSS -->
 <link id="theme-css" rel="stylesheet" href="assets/dark.css">
-<style>assets/dark.css</style>
 
 <!-- THREE-POSITION OVERRIDE SWITCH STYLES -->
 <style>
@@ -64,11 +63,10 @@
                 <button class="settings-btn" id="open-settings" type="button">Settings</button>
                 <button class="settings-btn" id="open-logs" type="button">Logs</button>
                 
-                <!-- NEW: Three-position power override switch -->
+                <!-- Three-position power override switch -->
                 <div class="override-group">
                     <div class="three-switch" id="override-switch">
                         <div class="slider-pill"></div>
-
                         <button type="button" data-mode="off" class="switch-btn">BATT</button>
                         <button type="button" data-mode="auto" class="switch-btn active">AUTO</button>
                         <button type="button" data-mode="on" class="switch-btn">SOURCE</button>
@@ -108,7 +106,7 @@
         </div>
     </div>
 
-    <!-- (All your existing modals stay exactly the same) -->
+    <!-- SETTINGS MODAL (confirm-sim removed) -->
     <div class="modal-backdrop" id="settings-backdrop" aria-hidden="true">
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
             <div class="modal-header">
@@ -149,6 +147,7 @@
         </div>
     </div>
 
+    <!-- LOGS MODAL -->
     <div class="modal-backdrop" id="logs-backdrop" aria-hidden="true">
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="logs-title">
             <div class="modal-header">
@@ -195,6 +194,7 @@
         </div>
     </div>
 
+    <!-- CONFIRM MODALS -->
     <div class="modal-backdrop" id="confirm-backdrop" aria-hidden="true">
         <div class="modal confirm" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
             <div class="modal-header">
@@ -239,6 +239,26 @@
             <div class="modal-actions">
                 <button class="ghost-btn" id="confirm-reset-all-cancel" type="button">Cancel</button>
                 <button class="danger-btn" id="confirm-reset-all-ok" type="button">Reset All</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="confirm-sim" aria-hidden="true">
+        <div class="modal confirm" role="dialog" aria-modal="true" aria-labelledby="confirm-sim-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-eyebrow">Warning</div>
+                    <h2 id="confirm-sim-title">Enable Simulation Mode?</h2>
+                </div>
+            </div>
+            <div class="modal-note">
+                ⚠️ This will generate <b>fake data</b> and may trigger relay switching
+                and system state changes unrelated to real hardware.<br><br>
+                Only enable this for testing.
+            </div>
+            <div class="modal-actions">
+                <button id="confirm-sim-cancel" type="button">Cancel</button>
+                <button id="confirm-sim-ok" type="button">Enable</button>
             </div>
         </div>
     </div>
