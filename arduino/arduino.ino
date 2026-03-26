@@ -1,153 +1,126 @@
-// SkyChopper Arduino telemetry + relay control
-// - Reads analog voltages and reports them over Serial as JSON (one line per sample).
-// - Listens for mode commands from the Pi to control a relay (SOURCE/BATT).
+// ===== CONFIG =====
+bool SIMULATE = true;     // ← set to false when using real sensors
 
-#include <Arduino.h>
+// ===== PIN DEFINITIONS (used when SIMULATE = false) =====
+const int BATT_PIN   = A0;
+const int SOURCE_PIN = A1;
+const int BUCK_PIN   = A2;
 
-// ===== Hardware config =====
-// Analog input pins
-static const uint8_t PIN_BATT  = A0;
-static const uint8_t PIN_SOURCE = A1;
-static const uint8_t PIN_BUCK  = A2;
+// Voltage divider ratios (adjust to your hardware)
+const float BATT_DIVIDER_RATIO   = 4.2;   // example: 100k / 33k
+const float SOURCE_DIVIDER_RATIO = 4.2;
+const float BUCK_DIVIDER_RATIO   = 4.2;
 
-// Relay output pin
-static const uint8_t PIN_RELAY = 8;
+// ADC reference
+const float ADC_REF = 5.0;
+const int ADC_MAX = 1023;
 
-// If your relay is active LOW, set to false.
-static const bool RELAY_ACTIVE_HIGH = true;
+// ===== SIMULATION STATE =====
+float battV   = 12.0;
+float sourceV = 9.0;
+float buckV   = 9.0;
 
-// ===== ADC + voltage scaling =====
-// Set to your actual ADC reference voltage.
-static const float ADC_REF_VOLTS = 5.0f;
-static const float ADC_MAX_COUNTS = 1023.0f;
+unsigned long lastSend = 0;
+const unsigned long SEND_INTERVAL = 1000; // ms
 
-// Voltage divider multipliers:
-//   V_actual = V_adc * MULT
-// Example: If you use 100k (top) + 10k (bottom),
-//   MULT = (100k + 10k) / 10k = 11.0
-static const float BATT_DIVIDER_MULT  = 11.0f;
-static const float SOURCE_DIVIDER_MULT = 11.0f;
-static const float BUCK_DIVIDER_MULT  = 6.0f;
+// ===== UTILS =====
+float readVoltage(int pin, float dividerRatio) {
+  int raw = analogRead(pin);
+  float voltage = (raw / (float)ADC_MAX) * ADC_REF;
+  return voltage * dividerRatio;
+}
 
-// ===== Telemetry =====
-static const unsigned long SEND_INTERVAL_MS = 1000;
-static const uint8_t ADC_SAMPLES = 8;
+float clamp(float x, float a, float b) {
+  if (x < a) return a;
+  if (x > b) return b;
+  return x;
+}
 
-// ===== Serial =====
-static const unsigned long SERIAL_BAUD = 115200;
-static const uint8_t RX_LINE_MAX = 96;
-static char rxLine[RX_LINE_MAX];
-static uint8_t rxLen = 0;
+// ===== SIMULATION =====
+void simulateData() {
+  // Simulate battery slow discharge/charge
+  battV += (random(-5, 5) / 1000.0); // small noise
+  battV = clamp(battV, 9.0, 12.6);
 
-// Current relay mode
-static bool useSource = false;
-
-static float readAnalogVolts(uint8_t pin, float multiplier) {
-  unsigned long acc = 0;
-  for (uint8_t i = 0; i < ADC_SAMPLES; i++) {
-    acc += analogRead(pin);
-    delayMicroseconds(200);
+  // Simulate source appearing/disappearing
+  if (random(0, 1000) < 10) { // occasional drop
+    sourceV = 0;
+  } else {
+    sourceV += (random(-10, 10) / 100.0);
+    sourceV = clamp(sourceV, 8.0, 10.5);
   }
-  float raw = acc / (float)ADC_SAMPLES;
-  float v_adc = (raw / ADC_MAX_COUNTS) * ADC_REF_VOLTS;
-  return v_adc * multiplier;
+
+  // Buck tracks ~9V
+  buckV += (9.0 - buckV) * 0.2 + (random(-5, 5) / 100.0);
+  buckV = clamp(buckV, 8.5, 9.5);
 }
 
-static void setRelay(bool sourceMode) {
-  useSource = sourceMode;
-  bool level = RELAY_ACTIVE_HIGH ? sourceMode : !sourceMode;
-  digitalWrite(PIN_RELAY, level ? HIGH : LOW);
+// ===== REAL SENSOR READ =====
+void readRealData() {
+  battV   = readVoltage(BATT_PIN, BATT_DIVIDER_RATIO);
+  sourceV = readVoltage(SOURCE_PIN, SOURCE_DIVIDER_RATIO);
+  buckV   = readVoltage(BUCK_PIN, BUCK_DIVIDER_RATIO);
 }
 
-static void sendTelemetry(float battV, float sourceV, float buckV) {
-  // Minimal JSON that matches UI contract fields.
-  Serial.print(F("{\"batt_voltage\":"));
+// ===== SEND JSON =====
+void sendJSON() {
+  Serial.print("{");
+  
+  Serial.print("\"batt_voltage\":");
   Serial.print(battV, 3);
-  Serial.print(F(",\"source_voltage\":"));
+  Serial.print(",");
+
+  Serial.print("\"source_voltage\":");
   Serial.print(sourceV, 3);
-  Serial.print(F(",\"buck_voltage\":"));
+  Serial.print(",");
+
+  Serial.print("\"buck_voltage\":");
   Serial.print(buckV, 3);
-  Serial.print(F(",\"use_source\":"));
-  Serial.print(useSource ? F("true") : F("false"));
-  Serial.println(F("}"));
+
+  Serial.println("}");
 }
 
-static void handleCommand(const char *line) {
-  // Accept simple commands:
-  //   MODE SOURCE
-  //   MODE BATT
-  //   RELAY 1 / RELAY 0
-  //   JSON with use_source: true/false (best effort)
-  if (!line || !*line) return;
+// ===== RECEIVE COMMANDS =====
+void handleSerialCommands() {
+  if (!Serial.available()) return;
 
-  // Uppercase copy for simple matching
-  char buf[RX_LINE_MAX];
-  uint8_t i = 0;
-  for (; line[i] && i < RX_LINE_MAX - 1; i++) {
-    char c = line[i];
-    if (c >= 'a' && c <= 'z') c = c - 32;
-    buf[i] = c;
-  }
-  buf[i] = '\0';
+  String cmd = Serial.readStringUntil('\n');
+  cmd.trim();
 
-  if (strstr(buf, "MODE SOURCE")) {
-    setRelay(true);
-    return;
+  if (cmd == "MODE SOURCE") {
+    // You could switch a relay here
+    // digitalWrite(RELAY_PIN, HIGH);
   }
-  if (strstr(buf, "MODE BATT") || strstr(buf, "MODE BAT")) {
-    setRelay(false);
-    return;
-  }
-  if (strstr(buf, "RELAY 1") || strstr(buf, "RELAY ON")) {
-    setRelay(true);
-    return;
-  }
-  if (strstr(buf, "RELAY 0") || strstr(buf, "RELAY OFF")) {
-    setRelay(false);
-    return;
-  }
-
-  // Very small JSON parse: look for "USE_SOURCE": true/false
-  char *p = strstr(buf, "\"USE_SOURCE\"");
-  if (p) {
-    if (strstr(p, "TRUE")) setRelay(true);
-    if (strstr(p, "FALSE")) setRelay(false);
+  else if (cmd == "MODE BATT") {
+    // digitalWrite(RELAY_PIN, LOW);
   }
 }
 
-static void pollSerial() {
-  while (Serial.available() > 0) {
-    char c = (char)Serial.read();
-    if (c == '\r') continue;
-    if (c == '\n') {
-      rxLine[rxLen] = '\0';
-      handleCommand(rxLine);
-      rxLen = 0;
-    } else if (rxLen < RX_LINE_MAX - 1) {
-      rxLine[rxLen++] = c;
-    } else {
-      // overflow: reset buffer
-      rxLen = 0;
-    }
-  }
-}
-
+// ===== SETUP =====
 void setup() {
-  pinMode(PIN_RELAY, OUTPUT);
-  setRelay(false);
-  Serial.begin(SERIAL_BAUD);
+  Serial.begin(115200);
+  randomSeed(analogRead(0));
+
+  if (!SIMULATE) {
+    pinMode(BATT_PIN, INPUT);
+    pinMode(SOURCE_PIN, INPUT);
+    pinMode(BUCK_PIN, INPUT);
+  }
 }
 
+// ===== LOOP =====
 void loop() {
-  static unsigned long lastSend = 0;
-  pollSerial();
+  handleSerialCommands();
 
-  unsigned long now = millis();
-  if (now - lastSend >= SEND_INTERVAL_MS) {
-    lastSend = now;
-    float battV = readAnalogVolts(PIN_BATT, BATT_DIVIDER_MULT);
-    float sourceV = readAnalogVolts(PIN_SOURCE, SOURCE_DIVIDER_MULT);
-    float buckV = readAnalogVolts(PIN_BUCK, BUCK_DIVIDER_MULT);
-    sendTelemetry(battV, sourceV, buckV);
+  if (millis() - lastSend >= SEND_INTERVAL) {
+    lastSend = millis();
+
+    if (SIMULATE) {
+      simulateData();
+    } else {
+      readRealData();
+    }
+
+    sendJSON();
   }
 }

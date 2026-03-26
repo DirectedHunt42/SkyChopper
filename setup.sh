@@ -17,35 +17,46 @@ echo "Repo: ${ROOT_DIR}"
 
 echo "Installing packages..."
 apt-get update -y
-apt-get install -y nginx avahi-daemon
+apt-get install -y nginx avahi-daemon curl
 
+# Install Node.js if missing
 if ! command -v node >/dev/null 2>&1; then
   echo "Node.js not found. Installing Node.js LTS..."
   curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
   apt-get install -y nodejs
 fi
 
+# 🔐 FIX: Ensure nginx can traverse directories (prevents 403)
+echo "Fixing permissions for nginx access..."
+chmod o+rx /home || true
+chmod o+rx "$(dirname "${ROOT_DIR}")" || true
+chmod -R o+rX "${ROOT_DIR}"
+
 echo "Configuring nginx..."
 cat > "${NGINX_SITE}" <<EOF
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;
+    listen 80;
+    listen [::]:80;
+
+    server_name skychopper.local;
 
     root ${ROOT_DIR};
     index index.html;
 
     location / {
-        try_files \$uri \$uri/ =404;
+        try_files \$uri \$uri/ /index.html;
     }
+
+    # Prevent internal redirect loop
+    location = /index.html { }
 }
 EOF
 
-if [[ -L "${NGINX_SITE_LINK}" || -e "${NGINX_SITE_LINK}" ]]; then
-  rm -f "${NGINX_SITE_LINK}"
-fi
+# Enable site
+rm -f "${NGINX_SITE_LINK}"
 ln -s "${NGINX_SITE}" "${NGINX_SITE_LINK}"
 rm -f /etc/nginx/sites-enabled/default
+
 nginx -t
 systemctl restart nginx
 systemctl enable nginx
@@ -85,4 +96,6 @@ systemctl enable avahi-daemon
 systemctl restart avahi-daemon
 
 echo "Setup complete."
-echo "Access the dashboard at: http://<pi-ip>/ or http://skychopper.local/"
+echo "Access the dashboard at:"
+echo "  http://<pi-ip>/"
+echo "  http://skychopper.local/"
