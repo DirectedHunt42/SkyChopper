@@ -17,7 +17,7 @@ const defaultSettings = {
     batt_on_percent: 80,
     batt_off_percent: 60,
     sim_fallback_enabled: false,
-    power_override: "auto"          // ← NEW
+    power_override: "auto"
 };
 
 // Default status if missing
@@ -56,7 +56,7 @@ if (!fs.existsSync(logFile)) {
     console.log("Created log.csv");
 }
 
-// ===== Serial bridge (preferred) =====
+// ===== CONFIG =====
 const SERIAL_PORT = process.env.SERIAL_PORT || "";
 const SERIAL_BAUD = Number.parseInt(process.env.SERIAL_BAUD || "115200", 10);
 const HTTP_PORT = Number.parseInt(process.env.PORT || "8000", 10);
@@ -66,9 +66,27 @@ const LOG_INTERVAL_MS = 5000;
 const LOG_MAX_LINES = 1000000;
 let lastLogAt = 0;
 let logLineCount = 0;
-let simulatorTimer = null;
 let pendingSettingsSync = null;
 
+// ===== SERIAL STATE =====
+let serialPortInstance = null;
+let lastDecision = {
+    system_on: defaultStatus.system_on,
+    use_source: defaultStatus.use_source,
+    batt_voltage: defaultStatus.batt_voltage,
+    source_voltage: defaultStatus.source_voltage
+};
+
+// ===== SIMULATOR STATE =====
+let systemOn = defaultStatus.system_on;
+let useSource = defaultStatus.use_source;
+let battV = defaultStatus.batt_voltage;
+let sourceV = defaultStatus.source_voltage;
+let buckV = defaultStatus.buck_voltage;
+let sourcePresent = true;
+let simulatorTimer = null;
+
+// ===== UTILS =====
 function countLogLines() {
     try {
         const text = fs.readFileSync(logFile, "utf8");
@@ -117,6 +135,7 @@ function loadSettings() {
     }
 }
 
+// ===== DECISION LOGIC (exact spec you requested) =====
 function computeDecision(telemetry, prev) {
     const settings = loadSettings();
     const fullV = settings.batt_full_voltage ?? defaultSettings.batt_full_voltage;
@@ -125,8 +144,6 @@ function computeDecision(telemetry, prev) {
     const offPercent = settings.batt_off_percent ?? defaultSettings.batt_off_percent;
     const sourceMin = settings.source_expected_min_v ?? defaultSettings.source_expected_min_v;
     const sourceMax = settings.source_expected_max_v ?? defaultSettings.source_expected_max_v;
-    const battStartV = emptyV + (fullV - emptyV) * (onPercent / 100);
-    const battStopV = emptyV + (fullV - emptyV) * (offPercent / 100);
 
     const battV = Number.isFinite(telemetry.batt_voltage) ? telemetry.batt_voltage : prev.batt_voltage;
     const sourceV = Number.isFinite(telemetry.source_voltage) ? telemetry.source_voltage : prev.source_voltage;
@@ -137,13 +154,6 @@ function computeDecision(telemetry, prev) {
     if (!systemOn && clampedPercent >= onPercent) systemOn = true;
     if (systemOn && clampedPercent <= offPercent) systemOn = false;
 
-    // ← UPDATED TO YOUR EXACT SPECIFICATION
-    // Battery "in range / above"   = >= batt_on_percent  → always prefer battery
-    // Battery "below range"        = <= batt_off_percent → use source ONLY if source is in range
-    // Battery <= 10%               → ALWAYS use source (critical low override)
-    // Source "in range"            = source_expected_min_v <= sourceV <= source_expected_max_v
-    // Hysteresis band (off% < batt% < on%) is treated as "good" → prefer battery
-    // system_on hysteresis is unchanged (no flickering)
     const override = settings.power_override || "auto";
     let useSource;
     if (override === "off") {
@@ -151,7 +161,7 @@ function computeDecision(telemetry, prev) {
     } else if (override === "on") {
         useSource = true;
     } else {
-        // AUTO mode – exact logic you requested
+        // AUTO mode – exact logic
         if (clampedPercent <= 10) {
             useSource = true;                                      // Batt at 10% or below → always source
         } else if (clampedPercent >= onPercent) {
@@ -169,8 +179,8 @@ function computeDecision(telemetry, prev) {
 
     return {
         settings,
-        battStartV,
-        battStopV,
+        battStartV: emptyV + (fullV - emptyV) * (onPercent / 100),
+        battStopV: emptyV + (fullV - emptyV) * (offPercent / 100),
         battPercent: clampedPercent,
         systemOn,
         useSource,
@@ -197,6 +207,7 @@ function writeStatus(telemetry, decision) {
     fs.writeFileSync(statusFile, JSON.stringify(payload, null, 2));
 }
 
+// ===== RESET / CLEAR FUNCTIONS =====
 function resetAllData() {
     if (fs.existsSync(dataFolder)) {
         fs.rmSync(dataFolder, { recursive: true, force: true });
@@ -215,76 +226,88 @@ function clearLogs() {
     logLineCount = 0;
 }
 
-function startSerialBridge() {
+// ===== SERIAL BRIDGE WITH AUTO-RECONNECT =====
+function attemptSerialConnection() {
+    if (serialPortInstance || !SERIAL_PORT) return false;
+
     let SerialPort, ReadlineParser;
     try {
         ({ SerialPort, ReadlineParser } = require("serialport"));
     } catch (err) {
-        console.log("serialport not installed; falling back to simulator mode.");
+        console.log("serialport not installed; falling back to simulator only.");
         return false;
     }
 
-    if (!SERIAL_PORT) {
-        console.log("SERIAL_PORT not set; falling back to simulator mode.");
-        return false;
-    }
+    try {
+        const port = new SerialPort({ path: SERIAL_PORT, baudRate: SERIAL_BAUD });
+        const parser = port.pipe(new ReadlineParser({ delimiter: "\n" }));
 
-    const port = new SerialPort({ path: SERIAL_PORT, baudRate: SERIAL_BAUD });
-    const parser = port.pipe(new ReadlineParser({ delimiter: "\n" }));
+        port.on("open", () => {
+            console.log(`✅ Serial bridge connected on ${SERIAL_PORT} @ ${SERIAL_BAUD}`);
+            serialPortInstance = port;
+            stopSimulator();                 // serial always wins
+        });
 
-    let lastDecision = {
-        system_on: defaultStatus.system_on,
-        use_source: defaultStatus.use_source,
-        batt_voltage: defaultStatus.batt_voltage,
-        source_voltage: defaultStatus.source_voltage
-    };
+        parser.on("data", (line) => {
+            const text = String(line).trim();
+            if (!text) return;
 
-    parser.on("data", (line) => {
-        const text = String(line).trim();
-        if (!text) return;
-        try {
-            const data = JSON.parse(text);
-            const decision = computeDecision(data, lastDecision);
-            decision.arduinoConnected = true;
-            writeStatus(data, decision);
-            maybeLog(data);
+            console.log(`📡 Raw serial data: ${text}`);
 
-            if (decision.useSource !== lastDecision.use_source) {
-                const cmd = decision.useSource ? "MODE SOURCE\n" : "MODE BATT\n";
-                port.write(cmd);
+            try {
+                const data = JSON.parse(text);
+                console.log(`✅ Parsed Arduino data → batt=${data.batt_voltage?.toFixed(2)}V source=${data.source_voltage?.toFixed(2)}V buck=${data.buck_voltage?.toFixed(2)}V relay=${data.relay_state}`);
+
+                const decision = computeDecision(data, lastDecision);
+                decision.arduinoConnected = true;
+                writeStatus(data, decision);
+                maybeLog(data);
+
+                // Send mode command only if decision changed
+                if (decision.useSource !== lastDecision.use_source) {
+                    const cmd = decision.useSource ? "MODE SOURCE\n" : "MODE BATT\n";
+                    port.write(cmd, (err) => { if (err) console.log("Serial write error:", err.message); });
+                }
+
+                lastDecision = {
+                    system_on: decision.systemOn,
+                    use_source: decision.useSource,
+                    batt_voltage: data.batt_voltage,
+                    source_voltage: data.source_voltage
+                };
+            } catch (e) {
+                console.log(`❌ JSON parse error: ${e.message}\nRaw line was: ${text}`);
             }
+        });
 
-            lastDecision = {
-                system_on: decision.systemOn,
-                use_source: decision.useSource,
-                batt_voltage: data.batt_voltage,
-                source_voltage: data.source_voltage
-            };
-        } catch {
-            // Ignore malformed lines
-        }
-    });
+        port.on("close", () => {
+            console.log("⚠️ Serial port closed – will retry in 2 s");
+            serialPortInstance = null;
+            setTimeout(attemptSerialConnection, 2000);
+            syncSimulatorFallback();
+        });
 
-    port.on("open", () => console.log(`Serial bridge running on ${SERIAL_PORT} @ ${SERIAL_BAUD}`));
-    port.on("error", (err) => console.log("Serial error:", err.message));
+        port.on("error", (err) => {
+            console.log(`⚠️ Serial error: ${err.message} – retrying in 2 s`);
+            if (serialPortInstance === port) serialPortInstance = null;
+            setTimeout(attemptSerialConnection, 2000);
+            syncSimulatorFallback();
+        });
 
-    return true;
+        return true;
+    } catch (err) {
+        console.log("Failed to open serial port:", err.message);
+        return false;
+    }
 }
 
-// ===== Simulator fallback =====
-let systemOn = defaultStatus.system_on;
-let useSource = defaultStatus.use_source;
-let battV = defaultStatus.batt_voltage;
-let sourceV = defaultStatus.source_voltage;
-let buckV = defaultStatus.buck_voltage;
-let sourcePresent = true;
-
+// ===== SIMULATOR FALLBACK =====
 function clamp(x, a, b) {
     return Math.max(a, Math.min(b, x));
 }
 
 function generateData() {
-    const settings = JSON.parse(fs.readFileSync(settingsFile));
+    const settings = loadSettings();
 
     const fullV = settings.batt_full_voltage ?? defaultSettings.batt_full_voltage;
     const emptyV = settings.batt_empty_voltage ?? defaultSettings.batt_empty_voltage;
@@ -320,7 +343,7 @@ function generateData() {
     if (!systemOn && percent >= onPercent) systemOn = true;
     if (systemOn && percent <= offPercent) systemOn = false;
 
-    // ← UPDATED TO YOUR EXACT SPECIFICATION (identical logic as computeDecision)
+    // Same AUTO logic as computeDecision
     const override = settings.power_override || "auto";
     if (override === "off") {
         useSource = false;
@@ -328,17 +351,14 @@ function generateData() {
         useSource = true;
     } else {
         if (percent <= 10) {
-            useSource = true;                                      // Batt at 10% or below → always source
+            useSource = true;
         } else if (percent >= onPercent) {
-            useSource = false;                                     // Batt in range / above → use batt
+            useSource = false;
         } else if (percent > offPercent) {
-            useSource = false;                                     // Hysteresis band → still treat as good, use batt
+            useSource = false;
         } else {
-            // Batt below range (≤ offPercent and >10%)
-            const sourceIsGood = (sourceV > 0.1 &&
-                                  sourceV >= sourceMin &&
-                                  sourceV <= sourceMax);
-            useSource = sourceIsGood;                              // use source only if source in range, else batt
+            const sourceIsGood = (sourceV > 0.1 && sourceV >= sourceMin && sourceV <= sourceMax);
+            useSource = sourceIsGood;
         }
     }
 
@@ -374,42 +394,58 @@ function generateData() {
     maybeLog(data);
 }
 
-if (!startSerialBridge()) {
-    const startSimulator = () => {
-        if (simulatorTimer) return;
-        simulatorTimer = setInterval(generateData, 1000);
-        console.log("System simulator running...");
-    };
-
-    const stopSimulator = () => {
-        if (!simulatorTimer) return;
-        clearInterval(simulatorTimer);
-        simulatorTimer = null;
-        const decision = computeDecision(defaultStatus, defaultStatus);
-        decision.arduinoConnected = false;
-        writeStatus(defaultStatus, decision);
-        console.log("Simulator fallback disabled.");
-    };
-
-    const syncSimulatorFallback = () => {
-        const settings = loadSettings();
-        const simEnabled = typeof settings.sim_fallback_enabled === "boolean"
-            ? settings.sim_fallback_enabled
-            : defaultSettings.sim_fallback_enabled;
-        if (simEnabled) startSimulator(); else stopSimulator();
-    };
-
-    syncSimulatorFallback();
-
-    fs.watch(settingsFile, { persistent: true }, () => {
-        if (pendingSettingsSync) clearTimeout(pendingSettingsSync);
-        pendingSettingsSync = setTimeout(() => {
-            pendingSettingsSync = null;
-            syncSimulatorFallback();
-        }, 150);
-    });
+function startSimulator() {
+    if (simulatorTimer) return;
+    simulatorTimer = setInterval(generateData, 1000);
+    console.log("System simulator running (fallback)");
 }
 
+function stopSimulator() {
+    if (!simulatorTimer) return;
+    clearInterval(simulatorTimer);
+    simulatorTimer = null;
+    console.log("Simulator stopped");
+}
+
+function syncSimulatorFallback() {
+    if (serialPortInstance) {
+        stopSimulator();
+        return;
+    }
+    const settings = loadSettings();
+    const simEnabled = typeof settings.sim_fallback_enabled === "boolean"
+        ? settings.sim_fallback_enabled
+        : defaultSettings.sim_fallback_enabled;
+    if (simEnabled) startSimulator();
+    else stopSimulator();
+}
+
+// ===== START EVERYTHING =====
+console.log("🚀 SkyChopper reader starting...");
+
+// Try serial immediately
+attemptSerialConnection();
+
+// Keep retrying every 5 seconds if Arduino is plugged in later
+setInterval(() => {
+    if (!serialPortInstance && SERIAL_PORT) {
+        attemptSerialConnection();
+    }
+}, 5000);
+
+// Initial simulator check
+syncSimulatorFallback();
+
+// Watch settings.json for sim_fallback_enabled changes
+fs.watch(settingsFile, { persistent: true }, () => {
+    if (pendingSettingsSync) clearTimeout(pendingSettingsSync);
+    pendingSettingsSync = setTimeout(() => {
+        pendingSettingsSync = null;
+        syncSimulatorFallback();
+    }, 150);
+});
+
+// ===== API SERVER =====
 if (ENABLE_API_SERVER) {
     const server = http.createServer((req, res) => {
         const requestUrl = new URL(req.url || "/", `http://localhost:${HTTP_PORT}`);
@@ -466,3 +502,5 @@ if (ENABLE_API_SERVER) {
         console.log(`API server running at http://localhost:${HTTP_PORT}`);
     });
 }
+
+console.log("✅ Full updated read.js is now running - status.json should update every second.");
