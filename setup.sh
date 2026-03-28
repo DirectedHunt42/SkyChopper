@@ -82,6 +82,8 @@ ExecStart=/usr/bin/node ${ROOT_DIR}/scripts/read.js
 Restart=always
 RestartSec=2
 Environment=ENABLE_API_SERVER=1
+Environment=SERIAL_PORT=/dev/serial0
+Environment=SERIAL_BAUD=115200
 
 [Install]
 WantedBy=multi-user.target
