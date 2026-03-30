@@ -27,7 +27,8 @@ body {
         radial-gradient(900px 500px at 90% 0%, rgba(99, 102, 241, 0.18) 0%, rgba(99,102,241,0) 60%),
         linear-gradient(180deg, var(--bg), var(--bg-2));
     min-height: 100vh;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .page {
@@ -43,6 +44,7 @@ body {
 .hero {
     text-align: left;
     margin: 0;
+    width: 100%;
 }
 
 .hero-row {
@@ -50,12 +52,21 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.hero-row h1 {
+    flex: 1 1 320px;
 }
 
 .hero-actions {
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex: 1 1 280px;
 }
 
 .eyebrow {
@@ -70,6 +81,7 @@ h1 {
     margin: 0 0 6px 0;
     font-size: clamp(22px, 3vw, 34px);
     font-weight: 600;
+    max-width: 100%;
 }
 
 .sub {
@@ -336,10 +348,12 @@ h1 {
 
 .status-row {
     display: flex;
-    gap: 14px;
-    align-items: center;
-    padding: 6px 6px 10px;
     flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 0 0 10px;
+    margin: 0;
+    justify-content: flex-start;
 }
 
 .status-item {
@@ -420,6 +434,7 @@ h1 {
     position: relative;
     flex: 1;
     min-height: 0;
+    display: flex;
 }
 
 .turbine {
@@ -512,6 +527,7 @@ canvas {
     align-self: stretch;
     position: relative;
     z-index: 1;
+    flex: 1;
 }
 
 @media (max-width: 560px) {
