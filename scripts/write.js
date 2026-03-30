@@ -68,20 +68,8 @@ let availableKeys = new Set();
 let dpr = window.devicePixelRatio || 1;
 let lastFrame = performance.now();
 
-const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
-const palette = prefersLight
-    ? {
-        bg: "#f8fafc",
-        panel: "#ffffff",
-        ink: "#0f172a",
-        muted: "#64748b",
-        accent: "#0ea5e9",
-        good: "#22c55e",
-        warn: "#f97316",
-        danger: "#ef4444",
-        outline: "#e2e8f0"
-    }
-    : {
+const palette =
+    {
         bg: "#0b1120",
         panel: "#111827",
         ink: "#e2e8f0",
