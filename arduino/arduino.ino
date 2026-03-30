@@ -1,5 +1,5 @@
 // ===== CONFIG =====
-bool SIMULATE = true;     // ← set to false when using real sensors
+bool SIMULATE = false;     // ← set to false when using real sensors
 
 // ===== PIN DEFINITIONS =====
 const int BATT_PIN   = A0;
@@ -9,9 +9,9 @@ const int BUCK_PIN   = A2;
 const int RELAY_PIN  = 7;   // Relay control pin
 
 // Voltage divider ratios (adjust to your hardware)
-const float BATT_DIVIDER_RATIO   = 4.2;
-const float SOURCE_DIVIDER_RATIO = 4.2;
-const float BUCK_DIVIDER_RATIO   = 4.2;
+const float BATT_DIVIDER_RATIO   = 3.13;
+const float SOURCE_DIVIDER_RATIO = 3.13;
+const float BUCK_DIVIDER_RATIO   = 3.13;
 
 // ADC reference
 const float ADC_REF = 5.0;
