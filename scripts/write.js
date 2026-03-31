@@ -90,7 +90,7 @@ const settingsDefaults = {
     batt_on_percent: 80,
     batt_off_percent: 60,
     sim_fallback_enabled: true,
-    power_override: "auto"          // ← NEW
+    power_override: "auto"
 };
 
 let settingsState = { ...settingsDefaults };
@@ -103,10 +103,14 @@ let thresholds = {
 
 function applyStatusLevel(dotEl, level) {
     if (!dotEl) return;
-    dotEl.className = "status-dot" + level;
+    const cleaned = String(level || "").trim();
+    const levelClasses = ["on", "warn", "danger"];
+    dotEl.classList.remove(...levelClasses);
+    if (cleaned) dotEl.classList.add(cleaned);
     const item = dotEl.closest(".status-item");
     if (item) {
-        item.className = "status-item" + level;
+        item.classList.remove(...levelClasses);
+        if (cleaned) item.classList.add(cleaned);
     }
 }
 
