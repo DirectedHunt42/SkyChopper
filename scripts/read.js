@@ -147,6 +147,7 @@ function computeDecision(telemetry, prev) {
 
     const battV = Number.isFinite(telemetry.batt_voltage) ? telemetry.batt_voltage : prev.batt_voltage;
     const sourceV = Number.isFinite(telemetry.source_voltage) ? telemetry.source_voltage : prev.source_voltage;
+    const buckV = Number.isFinite(telemetry.buck_voltage) ? telemetry.buck_voltage : NaN;
     const battPercent = ((battV - emptyV) / (fullV - emptyV)) * 100;
     const clampedPercent = Math.max(0, Math.min(100, battPercent));
 
@@ -162,7 +163,9 @@ function computeDecision(telemetry, prev) {
         useSource = true;
     } else {
         // AUTO mode – exact logic
-        if (clampedPercent <= 10) {
+        if (Number.isFinite(buckV) && (buckV < 8.5 || buckV > 9.5)) {
+            useSource = true;                                      // Buck out of safe range → force source
+        } else if (clampedPercent <= 10) {
             useSource = true;                                      // Batt at 10% or below → always source
         } else if (clampedPercent >= onPercent) {
             useSource = false;                                     // Batt in range / above → use batt
@@ -350,7 +353,9 @@ function generateData() {
     } else if (override === "on") {
         useSource = true;
     } else {
-        if (percent <= 10) {
+        if (Number.isFinite(buckV) && (buckV < 8.5 || buckV > 9.5)) {
+            useSource = true;
+        } else if (percent <= 10) {
             useSource = true;
         } else if (percent >= onPercent) {
             useSource = false;
