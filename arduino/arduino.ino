@@ -13,8 +13,8 @@ const float BATT_DIVIDER_RATIO   = 3.13;
 const float SOURCE_DIVIDER_RATIO = 3.13;
 const float BUCK_DIVIDER_RATIO   = 3.13;
 
-// ADC reference
-const float ADC_REF = 5.0;
+// ADC reference (will be measured dynamically on AVR boards)
+const float ADC_REF_FALLBACK = 5.0;
 const int ADC_MAX = 1023;
 
 // ===== STATE =====
@@ -23,14 +23,33 @@ float sourceV = 9.0;
 float buckV   = 9.0;
 
 bool relayState = false; // false = SOURCE (LOW), true = BATT (HIGH)
+unsigned long lastRelayChange = 0;
+const unsigned long RELAY_SETTLE_MS = 25;
 
 unsigned long lastSend = 0;
 const unsigned long SEND_INTERVAL = 1000; // ms
 
 // ===== UTILS =====
-float readVoltage(int pin, float dividerRatio) {
+// Measure Vcc using the internal 1.1V reference (AVR only).
+// Falls back to ADC_REF_FALLBACK on non-AVR boards.
+float readVcc() {
+#if defined(__AVR__)
+  // Configure the ADC to measure the internal 1.1V bandgap against Vcc
+  ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+  delay(2); // allow Vref to settle
+  ADCSRA |= _BV(ADSC);
+  while (bit_is_set(ADCSRA, ADSC)) { }
+  uint16_t raw = ADC;
+  // 1.1V * 1023 * 1000 / raw = Vcc in mV
+  return 1125300.0 / (float)raw / 1000.0;
+#else
+  return ADC_REF_FALLBACK;
+#endif
+}
+
+float readVoltage(int pin, float dividerRatio, float vcc) {
   int raw = analogRead(pin);
-  float voltage = (raw / (float)ADC_MAX) * ADC_REF;
+  float voltage = (raw / (float)ADC_MAX) * vcc;
   return voltage * dividerRatio;
 }
 
@@ -61,9 +80,10 @@ void simulateData() {
 
 // ===== REAL SENSOR READ =====
 void readRealData() {
-  battV   = readVoltage(BATT_PIN, BATT_DIVIDER_RATIO);
-  sourceV = readVoltage(SOURCE_PIN, SOURCE_DIVIDER_RATIO);
-  buckV   = readVoltage(BUCK_PIN, BUCK_DIVIDER_RATIO);
+  float vcc = readVcc();
+  battV   = readVoltage(BATT_PIN, BATT_DIVIDER_RATIO, vcc);
+  sourceV = readVoltage(SOURCE_PIN, SOURCE_DIVIDER_RATIO, vcc);
+  buckV   = readVoltage(BUCK_PIN, BUCK_DIVIDER_RATIO, vcc);
 }
 
 // ===== SERIAL COMMANDS =====
@@ -76,10 +96,12 @@ void handleSerialCommands() {
   if (cmd == "MODE SOURCE") {
     digitalWrite(RELAY_PIN, LOW);   // SOURCE
     relayState = false;
+    lastRelayChange = millis();
   }
   else if (cmd == "MODE BATT") {
     digitalWrite(RELAY_PIN, HIGH);  // BATT
     relayState = true;
+    lastRelayChange = millis();
   }
 }
 
@@ -133,7 +155,10 @@ void loop() {
     if (SIMULATE) {
       simulateData();
     } else {
-      readRealData();
+      // Skip reading during relay switching transients
+      if (millis() - lastRelayChange >= RELAY_SETTLE_MS) {
+        readRealData();
+      }
     }
 
     sendJSON();
