@@ -20,7 +20,7 @@ const int ADC_MAX = 1023;
 // Optional fixed Vcc values (useful if you know the rail sags with the relay)
 const bool  USE_FIXED_VCC   = true;
 const float VCC_RELAY_OFF   = 5.0;
-const float VCC_RELAY_ON    = 4.4;
+const float VCC_RELAY_ON    = 4.6;
 
 // ===== STATE =====
 float battV   = 12.0;
