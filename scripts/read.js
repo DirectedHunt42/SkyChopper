@@ -17,7 +17,8 @@ const defaultSettings = {
     batt_on_percent: 80,
     batt_off_percent: 60,
     sim_fallback_enabled: false,
-    power_override: "auto"
+    power_override: "auto",
+    title: 1
 };
 
 // Default status if missing
@@ -129,7 +130,12 @@ countLogLines();
 
 function loadSettings() {
     try {
-        return JSON.parse(fs.readFileSync(settingsFile));
+        const loaded = JSON.parse(fs.readFileSync(settingsFile));
+        const merged = { ...defaultSettings, ...loaded };
+        if (JSON.stringify(loaded) !== JSON.stringify(merged)) {
+            fs.writeFileSync(settingsFile, JSON.stringify(merged, null, 2));
+        }
+        return merged;
     } catch {
         return { ...defaultSettings };
     }

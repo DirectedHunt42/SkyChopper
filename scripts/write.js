@@ -1,6 +1,7 @@
 const canvas = document.getElementById('monitorCanvas');
 const ctx = canvas.getContext('2d');
 const turbine = document.getElementById('turbine');
+const dashboardTitle = document.getElementById('dashboard-title');
 const statusSource = document.getElementById('status-source');
 const statusBattery = document.getElementById('status-battery');
 const statusArduino = document.getElementById('status-arduino');
@@ -47,6 +48,19 @@ const confirmSim = document.getElementById('confirm-sim');
 const confirmSimCancel = document.getElementById('confirm-sim-cancel');
 const confirmSimOk = document.getElementById('confirm-sim-ok');
 
+const titleModes = {
+    1: {
+        productName: "SkyChopper",
+        dashboardName: "SkyChopper Wind Dashboard",
+        isVerticalAxis: false
+    },
+    2: {
+        productName: "SkySlicer",
+        dashboardName: "SkySlicer Wind Dashboard",
+        isVerticalAxis: true
+    }
+};
+
 // NEW: Override switch element
 const overrideSwitch = document.getElementById('override-switch');
 
@@ -90,7 +104,8 @@ const settingsDefaults = {
     batt_on_percent: 80,
     batt_off_percent: 60,
     sim_fallback_enabled: true,
-    power_override: "auto"
+    power_override: "auto",
+    title: 1
 };
 
 let settingsState = { ...settingsDefaults };
@@ -100,6 +115,19 @@ let thresholds = {
     sourceExpectedMinV: settingsState.source_expected_min_v,
     sourceExpectedMaxV: settingsState.source_expected_max_v
 };
+
+function applyTitleMode() {
+    const rawTitleMode = Number.parseInt(settingsState.title, 10);
+    const titleConfig = titleModes[rawTitleMode] || titleModes[1];
+    document.title = titleConfig.dashboardName;
+    if (dashboardTitle) {
+        dashboardTitle.textContent = titleConfig.dashboardName;
+    }
+    if (turbine) {
+        turbine.classList.toggle("vertical-axis", titleConfig.isVerticalAxis);
+        turbine.setAttribute("aria-label", `${titleConfig.productName} turbine`);
+    }
+}
 
 function applyStatusLevel(dotEl, level) {
     if (!dotEl) return;
@@ -185,6 +213,8 @@ function applySettings(next) {
     if (typeof settingsState.sim_fallback_enabled !== "boolean") {
         settingsState.sim_fallback_enabled = settingsDefaults.sim_fallback_enabled;
     }
+    const normalizedTitle = Number.parseInt(settingsState.title, 10);
+    settingsState.title = titleModes[normalizedTitle] ? normalizedTitle : settingsDefaults.title;
     const fullPack = Number.isFinite(settingsState.batt_full_voltage) ? settingsState.batt_full_voltage : settingsDefaults.batt_full_voltage;
     const emptyPack = Number.isFinite(settingsState.batt_empty_voltage) ? settingsState.batt_empty_voltage : settingsDefaults.batt_empty_voltage;
     const onPct = Number.isFinite(settingsState.batt_on_percent) ? settingsState.batt_on_percent : settingsDefaults.batt_on_percent;
@@ -196,6 +226,7 @@ function applySettings(next) {
         sourceExpectedMinV: Number.isFinite(settingsState.source_expected_min_v) ? settingsState.source_expected_min_v : thresholds.sourceExpectedMinV,
         sourceExpectedMaxV: Number.isFinite(settingsState.source_expected_max_v) ? settingsState.source_expected_max_v : thresholds.sourceExpectedMaxV
     };
+    applyTitleMode();
 }
 
 function getPackVoltageRange() {
