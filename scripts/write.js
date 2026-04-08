@@ -26,6 +26,7 @@ const logLinesCount = document.getElementById('log-lines-count');
 const serialMonitorPanel = document.getElementById('serial-monitor-panel');
 const toggleSerialMonitorBtn = document.getElementById('toggle-serial-monitor');
 const serialMonitorFeed = document.getElementById('serial-monitor-feed');
+const settingsVersion = document.getElementById('settings-version');
 let logAutoRefreshTimer = null;
 let serialMonitorTimer = null;
 const confirmBackdrop = document.getElementById('confirm-backdrop');
@@ -50,11 +51,14 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
+const APP_VERSION = "0.1.0";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
 const LOG_LEFT_HIDE_MS = 10000;
-const MAX_LOG_ROWS = 120;
+const MAX_LOG_ROWS = 40;
+const LOG_CHART_ROWS = 30;
+const LOG_REFRESH_MS = 15000;
 const confirmSim = document.getElementById('confirm-sim');
 const confirmSimCancel = document.getElementById('confirm-sim-cancel');
 const confirmSimOk = document.getElementById('confirm-sim-ok');
@@ -301,6 +305,9 @@ async function loadSettings() {
 
     fillSettingsForm();
     updateOverrideSwitch();   // ← NEW
+    if (settingsVersion) {
+        settingsVersion.textContent = `Version ${APP_VERSION}`;
+    }
 }
 
 function openSettingsModal() {
@@ -496,6 +503,7 @@ function renderLogTable(rows, header = []) {
         logTableBody.appendChild(tr);
         return;
     }
+    const fragment = document.createDocumentFragment();
     rows.forEach((row) => {
         const tr = document.createElement("tr");
         const cells = [
@@ -510,8 +518,9 @@ function renderLogTable(rows, header = []) {
             td.textContent = value;
             tr.appendChild(td);
         });
-        logTableBody.appendChild(tr);
+        fragment.appendChild(tr);
     });
+    logTableBody.appendChild(fragment);
 }
 
 function renderLogChart(rows) {
@@ -543,8 +552,8 @@ function renderLogChart(rows) {
         buck: Number.parseFloat(getLogCell(row, headerMap, "buck_voltage", 3))
     })).filter((d) => Number.isFinite(d.t));
 
-    const slice = parsed.filter((d) => d.t >= displayNow - windowMs && d.t <= displayNow);
-    const smoothSlice = smoothVoltageSeries(slice);
+    const rowsToChart = parsed.slice(-LOG_CHART_ROWS).filter((d) => d.t >= displayNow - windowMs && d.t <= displayNow);
+    const smoothSlice = smoothVoltageSeries(rowsToChart);
 
     const lastPoint = smoothSlice[smoothSlice.length - 1];
     if (lastPoint && lastPoint.t < displayNow) {
@@ -1021,7 +1030,7 @@ if (openLogs) {
         openLogsModal();
         resizeLogChart();
         loadLogTable();
-        if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(loadLogTable, 5000);
+        if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(loadLogTable, LOG_REFRESH_MS);
     });
 }
 if (closeLogs) closeLogs.addEventListener("click", closeLogsModal);
