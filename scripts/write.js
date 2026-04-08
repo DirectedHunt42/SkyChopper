@@ -54,6 +54,7 @@ const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
 const LOG_LEFT_HIDE_MS = 10000;
+const MAX_LOG_ROWS = 120;
 const confirmSim = document.getElementById('confirm-sim');
 const confirmSimCancel = document.getElementById('confirm-sim-cancel');
 const confirmSimOk = document.getElementById('confirm-sim-ok');
@@ -216,6 +217,9 @@ function resizeLogChart() {
     logChart.width = Math.max(1, Math.floor(rect.width * scale));
     logChart.height = Math.max(1, Math.floor(rect.height * scale));
     logChartCtx.setTransform(scale, 0, 0, scale, 0, 0);
+    if (logRowsCache.length && logsBackdrop?.classList.contains("open")) {
+        renderLogChart(logRowsCache);
+    }
 }
 
 function applySettings(next) {
@@ -349,6 +353,21 @@ function getLogCell(row, headerMap, key, fallbackIndex = -1) {
         return row[index] ?? "";
     }
     return fallbackIndex >= 0 ? (row[fallbackIndex] ?? "") : "";
+}
+
+function smoothVoltageSeries(series) {
+    if (!series || series.length < 3) return series;
+    return series.map((point, index) => {
+        if (index === 0 || index === series.length - 1) return point;
+        const prev = series[index - 1];
+        const next = series[index + 1];
+        return {
+            ...point,
+            batt: Number.isFinite(point.batt) ? ((prev.batt + point.batt * 2 + next.batt) / 4) : point.batt,
+            source: Number.isFinite(point.source) ? ((prev.source + point.source * 2 + next.source) / 4) : point.source,
+            buck: Number.isFinite(point.buck) ? ((prev.buck + point.buck * 2 + next.buck) / 4) : point.buck
+        };
+    });
 }
 
 function updateSerialMonitorVisibility() {
@@ -525,10 +544,11 @@ function renderLogChart(rows) {
     })).filter((d) => Number.isFinite(d.t));
 
     const slice = parsed.filter((d) => d.t >= displayNow - windowMs && d.t <= displayNow);
+    const smoothSlice = smoothVoltageSeries(slice);
 
-    const lastPoint = slice[slice.length - 1];
+    const lastPoint = smoothSlice[smoothSlice.length - 1];
     if (lastPoint && lastPoint.t < displayNow) {
-        slice.push({
+        smoothSlice.push({
             t: displayNow,
             batt: lastPoint.batt,
             source: lastPoint.source,
@@ -538,7 +558,7 @@ function renderLogChart(rows) {
 
     let minV = Infinity;
     let maxV = -Infinity;
-    slice.forEach((d) => {
+    smoothSlice.forEach((d) => {
         [d.batt, d.source, d.buck].forEach((v) => {
             if (Number.isFinite(v)) {
                 minV = Math.min(minV, v);
@@ -625,7 +645,7 @@ function renderLogChart(rows) {
     }
 
     const drawSmoothSeries = (key, color) => {
-        const points = slice
+        const points = smoothSlice
             .filter((d) => Number.isFinite(d[key]))
             .map((d) => ({ x: toX(d.t), y: toY(d[key]) }));
         if (!points.length) return;
@@ -665,15 +685,15 @@ function renderLogChart(rows) {
 async function loadLogTable() {
     if (!logTableBody) return;
     try {
-        const res = await fetch("data/log.csv", { cache: "no-store" });
+        const res = await fetch(`${API_BASE}/api/logs?limit=${MAX_LOG_ROWS}`, { cache: "no-store" });
         if (!res.ok) throw new Error("log fetch failed");
-        const text = await res.text();
-        const parsedCsv = parseCsvRows(text);
-        const rows = parsedCsv.rows;
-        logHeaderCache = parsedCsv.header;
+        const payload = await res.json();
+        const rows = Array.isArray(payload.rows) ? payload.rows.slice(-MAX_LOG_ROWS) : [];
+        const header = Array.isArray(payload.header) ? payload.header : [];
+        logHeaderCache = header;
 
         if (logLinesCount) {
-            const count = rows.length;
+            const count = Number.isFinite(payload.total_lines) ? payload.total_lines : rows.length;
             logLinesCount.textContent = `${count.toLocaleString()} / 1 000 000 log lines used`;
         }
 
@@ -991,9 +1011,6 @@ function renderLoop() {
         }
     }
     draw();
-    if (logChart && logChartCtx) {
-        renderLogChart(logRowsCache);
-    }
     requestAnimationFrame(renderLoop);
 }
 

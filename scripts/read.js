@@ -180,6 +180,55 @@ function countLogLines() {
     }
 }
 
+function readLastLogRows(limit = 120) {
+    ensureDataFolder();
+    ensureLogHeader();
+
+    if (!fs.existsSync(logFile)) {
+        return {
+            header: LOG_HEADER.split(","),
+            rows: [],
+            total_lines: 0
+        };
+    }
+
+    const headerText = fs.readFileSync(logFile, { encoding: "utf8", start: 0, end: 4095 });
+    const header = (headerText.split(/\r?\n/)[0] || LOG_HEADER).split(",");
+
+    const stat = fs.statSync(logFile);
+    const chunkSize = 64 * 1024;
+    let position = stat.size;
+    let remaining = "";
+    const rows = [];
+
+    while (position > 0 && rows.length <= limit) {
+        const readSize = Math.min(chunkSize, position);
+        position -= readSize;
+        const chunk = fs.readFileSync(logFile, {
+            encoding: "utf8",
+            start: position,
+            end: position + readSize - 1
+        });
+        const text = chunk + remaining;
+        const parts = text.split(/\r?\n/);
+        remaining = parts.shift();
+        rows.unshift(...parts.filter(Boolean));
+        if (rows.length > limit) {
+            rows.splice(0, rows.length - limit);
+        }
+    }
+
+    if (remaining && rows.length < limit) {
+        rows.unshift(remaining);
+    }
+
+    return {
+        header,
+        rows: rows.slice(-limit).map((line) => line.split(',')),
+        total_lines: logLineCount
+    };
+}
+
 function trimLogIfNeeded() {
     if (logLineCount <= LOG_MAX_LINES) return;
     const text = fs.readFileSync(logFile, "utf8");
@@ -588,6 +637,15 @@ if (ENABLE_API_SERVER) {
             clearLogs();
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ ok: true }));
+            return;
+        }
+
+        if (pathname === "/api/logs" && req.method === "GET") {
+            const limit = Number.parseInt(requestUrl.searchParams.get("limit") || "120", 10);
+            const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(500, limit) : 120;
+            const payload = readLastLogRows(safeLimit);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, ...payload }));
             return;
         }
 
