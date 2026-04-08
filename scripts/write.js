@@ -18,6 +18,8 @@ const resetSettingsBtn = document.getElementById('reset-settings');
 const resetAllBtn = document.getElementById('reset-all');
 const logsBackdrop = document.getElementById('logs-backdrop');
 const closeLogs = document.getElementById('close-logs');
+const serialMonitorBackdrop = document.getElementById('serial-monitor-backdrop');
+const closeSerialMonitor = document.getElementById('close-serial-monitor');
 const logTableWrap = document.getElementById('log-table-wrap');
 const logTableBody = document.getElementById('log-table-body');
 const logLinesCount = document.getElementById('log-lines-count');
@@ -46,8 +48,7 @@ let logRowsCache = [];
 let logHeaderCache = [];
 let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
-let logModalOpenedAt = 0;
-let serialMonitorVisible = false;
+let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
@@ -314,12 +315,6 @@ function openLogsModal() {
     if (!logsBackdrop) return;
     logsBackdrop.classList.add("open");
     logsBackdrop.setAttribute("aria-hidden", "false");
-    logModalOpenedAt = Date.now();
-    serialMonitorEntries = [];
-    serialMonitorLatestId = 0;
-    serialMonitorVisible = false;
-    updateSerialMonitorVisibility();
-    renderSerialMonitor();
 }
 
 function closeLogsModal() {
@@ -330,15 +325,6 @@ function closeLogsModal() {
         clearInterval(logAutoRefreshTimer);
         logAutoRefreshTimer = null;
     }
-    if (serialMonitorTimer) {
-        clearInterval(serialMonitorTimer);
-        serialMonitorTimer = null;
-    }
-    serialMonitorEntries = [];
-    serialMonitorLatestId = 0;
-    serialMonitorVisible = false;
-    updateSerialMonitorVisibility();
-    renderSerialMonitor();
 }
 
 function parseCsvRows(text) {
@@ -366,12 +352,47 @@ function getLogCell(row, headerMap, key, fallbackIndex = -1) {
 }
 
 function updateSerialMonitorVisibility() {
-    if (serialMonitorPanel) {
-        serialMonitorPanel.hidden = !serialMonitorVisible;
+    const isOpen = serialMonitorBackdrop?.classList.contains("open");
+    if (serialMonitorBackdrop) {
+        serialMonitorBackdrop.setAttribute("aria-hidden", isOpen ? "false" : "true");
     }
     if (toggleSerialMonitorBtn) {
-        toggleSerialMonitorBtn.textContent = serialMonitorVisible ? "Hide Serial Monitor" : "Show Serial Monitor";
+        toggleSerialMonitorBtn.textContent = isOpen ? "Serial Monitor Open" : "Open Serial Monitor";
     }
+}
+
+function resetSerialMonitorState() {
+    serialMonitorEntries = [];
+    serialMonitorLatestId = 0;
+    serialMonitorOpenedAt = Date.now();
+    renderSerialMonitor();
+}
+
+function openSerialMonitorModal() {
+    if (!serialMonitorBackdrop) return;
+    serialMonitorBackdrop.classList.add("open");
+    serialMonitorBackdrop.setAttribute("aria-hidden", "false");
+    resetSerialMonitorState();
+    updateSerialMonitorVisibility();
+    loadSerialMonitor();
+    if (!serialMonitorTimer) {
+        serialMonitorTimer = setInterval(loadSerialMonitor, 1000);
+    }
+}
+
+function closeSerialMonitorModal() {
+    if (!serialMonitorBackdrop) return;
+    serialMonitorBackdrop.classList.remove("open");
+    serialMonitorBackdrop.setAttribute("aria-hidden", "true");
+    if (serialMonitorTimer) {
+        clearInterval(serialMonitorTimer);
+        serialMonitorTimer = null;
+    }
+    serialMonitorEntries = [];
+    serialMonitorLatestId = 0;
+    serialMonitorOpenedAt = 0;
+    renderSerialMonitor();
+    updateSerialMonitorVisibility();
 }
 
 function renderSerialMonitor() {
@@ -415,7 +436,7 @@ function renderSerialMonitor() {
 }
 
 async function loadSerialMonitor() {
-    if (!serialMonitorFeed || !logsBackdrop?.classList.contains("open")) return;
+    if (!serialMonitorFeed || !serialMonitorBackdrop?.classList.contains("open")) return;
     try {
         const res = await fetch(`${API_BASE}/api/serial-monitor?since=${serialMonitorLatestId}`, { cache: "no-store" });
         if (!res.ok) throw new Error("serial monitor fetch failed");
@@ -426,7 +447,7 @@ async function loadSerialMonitor() {
         if (incoming.length) {
             const filtered = incoming.filter((entry) => {
                 const entryTime = Date.parse(entry.time_iso);
-                return !Number.isFinite(entryTime) || entryTime >= logModalOpenedAt;
+                return !Number.isFinite(entryTime) || entryTime >= serialMonitorOpenedAt;
             });
             if (filtered.length) {
                 serialMonitorEntries.push(...filtered);
@@ -983,22 +1004,19 @@ if (openLogs) {
         openLogsModal();
         resizeLogChart();
         loadLogTable();
-        loadSerialMonitor();
         if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(loadLogTable, 5000);
-        if (!serialMonitorTimer) serialMonitorTimer = setInterval(loadSerialMonitor, 1000);
     });
 }
 if (closeLogs) closeLogs.addEventListener("click", closeLogsModal);
 if (logsBackdrop) logsBackdrop.addEventListener("click", (e) => { if (e.target === logsBackdrop) closeLogsModal(); });
 if (toggleSerialMonitorBtn) {
     toggleSerialMonitorBtn.addEventListener("click", () => {
-        serialMonitorVisible = !serialMonitorVisible;
-        updateSerialMonitorVisibility();
-        if (serialMonitorVisible) {
-            renderSerialMonitor();
-        }
+        if (serialMonitorBackdrop?.classList.contains("open")) return;
+        openSerialMonitorModal();
     });
 }
+if (closeSerialMonitor) closeSerialMonitor.addEventListener("click", closeSerialMonitorModal);
+if (serialMonitorBackdrop) serialMonitorBackdrop.addEventListener("click", (e) => { if (e.target === serialMonitorBackdrop) closeSerialMonitorModal(); });
 if (downloadLog) {
     downloadLog.addEventListener("click", async () => {
         try {

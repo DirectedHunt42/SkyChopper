@@ -608,8 +608,18 @@ if (ENABLE_API_SERVER) {
         res.end("Not found");
     });
 
+    server.on("error", (err) => {
+        if (err && err.code === "EADDRINUSE") {
+            console.log(`API server not started: port ${HTTP_PORT} is already in use. Reader will continue without binding a second server.`);
+            return;
+        }
+        throw err;
+    });
+
     server.listen(HTTP_PORT, () => {
-        console.log(`API server running at http://localhost:${HTTP_PORT}`);
+        if (server.listening) {
+            console.log(`API server running at http://localhost:${HTTP_PORT}`);
+        }
     });
 }
 
