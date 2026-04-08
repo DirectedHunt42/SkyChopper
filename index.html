@@ -178,16 +178,27 @@
                             <th>Battery (V)</th>
                             <th>Source (V)</th>
                             <th>Buck (V)</th>
+                            <th>Relay Mode</th>
                         </tr>
                     </thead>
                     <tbody id="log-table-body">
                         <tr>
-                            <td colspan="4">Loading...</td>
+                            <td colspan="5">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
+            <div class="serial-monitor-panel" id="serial-monitor-panel" hidden>
+                <div class="log-chart-header">
+                    <div class="log-chart-title">Live Serial Monitor</div>
+                    <div class="modal-note">History starts when this popup opens.</div>
+                </div>
+                <div class="serial-monitor-feed" id="serial-monitor-feed">
+                    <div class="serial-monitor-empty">Waiting for serial traffic...</div>
+                </div>
+            </div>
             <div class="modal-actions">
+                <button class="ghost-btn" id="toggle-serial-monitor" type="button">Show Serial Monitor</button>
                 <button class="ghost-btn" id="download-log" type="button">Download Log</button>
                 <button class="danger-btn" id="clear-logs" type="button">Clear Logs</button>
             </div>

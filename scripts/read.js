@@ -6,6 +6,8 @@ const statusFile = path.join(__dirname, "../data/status.json");
 const settingsFile = path.join(__dirname, "../data/settings.json");
 const logFile = path.join(__dirname, "../data/log.csv");
 const dataFolder = path.join(__dirname, "../data");
+const LOG_HEADER = "time_iso,batt_voltage,source_voltage,buck_voltage,relay_mode";
+const SERIAL_MONITOR_MAX_ENTRIES = 500;
 
 // Default settings if missing
 const defaultSettings = {
@@ -53,9 +55,11 @@ if (!fs.existsSync(statusFile)) {
 
 // Create log.csv if missing
 if (!fs.existsSync(logFile)) {
-    fs.writeFileSync(logFile, "time_iso,batt_voltage,source_voltage,buck_voltage\n");
+    fs.writeFileSync(logFile, `${LOG_HEADER}\n`);
     console.log("Created log.csv");
 }
+
+ensureLogHeader();
 
 // ===== CONFIG =====
 const SERIAL_PORT = process.env.SERIAL_PORT || "";
@@ -68,6 +72,8 @@ const LOG_MAX_LINES = 1000000;
 let lastLogAt = 0;
 let logLineCount = 0;
 let pendingSettingsSync = null;
+let serialMonitorSequence = 0;
+const serialMonitorEntries = [];
 
 // ===== SERIAL STATE =====
 let serialPortInstance = null;
@@ -88,6 +94,82 @@ let sourcePresent = true;
 let simulatorTimer = null;
 
 // ===== UTILS =====
+function normalizeRelayMode(value, fallbackUseSource = null) {
+    if (typeof value === "string") {
+        const upper = value.trim().toUpperCase();
+        if (upper === "BATT" || upper === "1" || upper === "CLOSED" || upper === "BATT_CLOSED") {
+            return "BATT (closed)";
+        }
+        if (upper === "SOURCE" || upper === "0" || upper === "OPEN" || upper === "SOURCE_OPEN") {
+            return "SOURCE (open)";
+        }
+    }
+
+    if (typeof value === "number") {
+        if (value === 1) return "BATT (closed)";
+        if (value === 0) return "SOURCE (open)";
+    }
+
+    if (typeof value === "boolean") {
+        return value ? "BATT (closed)" : "SOURCE (open)";
+    }
+
+    if (typeof fallbackUseSource === "boolean") {
+        return fallbackUseSource ? "SOURCE (open)" : "BATT (closed)";
+    }
+
+    return "";
+}
+
+function recordSerialMonitor(direction, message) {
+    const text = String(message ?? "").trim();
+    if (!text) return;
+    serialMonitorSequence += 1;
+    serialMonitorEntries.push({
+        id: serialMonitorSequence,
+        time_iso: new Date().toISOString(),
+        direction,
+        message: text
+    });
+    if (serialMonitorEntries.length > SERIAL_MONITOR_MAX_ENTRIES) {
+        serialMonitorEntries.splice(0, serialMonitorEntries.length - SERIAL_MONITOR_MAX_ENTRIES);
+    }
+}
+
+function ensureLogHeader() {
+    ensureDataFolder();
+
+    if (!fs.existsSync(logFile)) {
+        fs.writeFileSync(logFile, `${LOG_HEADER}\n`);
+        console.log("Created log.csv");
+        return;
+    }
+
+    const text = fs.readFileSync(logFile, "utf8");
+    const normalized = text.replace(/\r\n/g, "\n");
+    const lines = normalized.split("\n");
+    const header = (lines[0] || "").trim();
+    const legacyHeader = "time_iso,batt_voltage,source_voltage,buck_voltage";
+
+    if (header === LOG_HEADER) return;
+
+    if (header === legacyHeader) {
+        const upgradedLines = lines
+            .filter((line, index) => index === 0 || line.length > 0)
+            .map((line, index) => {
+                if (index === 0) return LOG_HEADER;
+                return `${line},`;
+            });
+        fs.writeFileSync(logFile, `${upgradedLines.join("\n")}\n`);
+        console.log("Upgraded log.csv to include relay_mode column");
+        return;
+    }
+
+    if (!header) {
+        fs.writeFileSync(logFile, `${LOG_HEADER}\n`);
+    }
+}
+
 function countLogLines() {
     try {
         const text = fs.readFileSync(logFile, "utf8");
@@ -102,7 +184,7 @@ function trimLogIfNeeded() {
     if (logLineCount <= LOG_MAX_LINES) return;
     const text = fs.readFileSync(logFile, "utf8");
     const lines = text.split(/\r?\n/).filter(Boolean);
-    const header = lines[0] || "time_iso,batt_voltage,source_voltage,buck_voltage";
+    const header = lines[0] || LOG_HEADER;
     const dataLines = lines.slice(1);
     const keep = dataLines.slice(-LOG_MAX_LINES);
     const next = [header, ...keep].join("\n") + "\n";
@@ -115,11 +197,13 @@ function maybeLog(telemetry) {
     if (now - lastLogAt < LOG_INTERVAL_MS) return;
     lastLogAt = now;
     ensureDataFolder();
+    ensureLogHeader();
     const line = [
         new Date(now).toISOString(),
         Number.isFinite(telemetry.batt_voltage) ? telemetry.batt_voltage.toFixed(3) : "",
         Number.isFinite(telemetry.source_voltage) ? telemetry.source_voltage.toFixed(3) : "",
-        Number.isFinite(telemetry.buck_voltage) ? telemetry.buck_voltage.toFixed(3) : ""
+        Number.isFinite(telemetry.buck_voltage) ? telemetry.buck_voltage.toFixed(3) : "",
+        normalizeRelayMode(telemetry.relay_state, telemetry.use_source)
     ].join(",") + "\n";
     fs.appendFileSync(logFile, line);
     logLineCount += 1;
@@ -224,14 +308,14 @@ function resetAllData() {
     ensureDataFolder();
     fs.writeFileSync(settingsFile, JSON.stringify(defaultSettings, null, 2));
     fs.writeFileSync(statusFile, JSON.stringify(defaultStatus, null, 2));
-    fs.writeFileSync(logFile, "time_iso,batt_voltage,source_voltage,buck_voltage\n");
+    fs.writeFileSync(logFile, `${LOG_HEADER}\n`);
     logLineCount = 0;
     lastLogAt = 0;
 }
 
 function clearLogs() {
     ensureDataFolder();
-    fs.writeFileSync(logFile, "time_iso,batt_voltage,source_voltage,buck_voltage\n");
+    fs.writeFileSync(logFile, `${LOG_HEADER}\n`);
     logLineCount = 0;
 }
 
@@ -262,6 +346,7 @@ function attemptSerialConnection() {
             if (!text) return;
 
             console.log(`📡 Raw serial data: ${text}`);
+            recordSerialMonitor("arduino_to_pi", text);
 
             try {
                 const data = JSON.parse(text);
@@ -275,6 +360,7 @@ function attemptSerialConnection() {
                 // Send mode command only if decision changed
                 if (decision.useSource !== lastDecision.use_source) {
                     const cmd = decision.useSource ? "MODE SOURCE\n" : "MODE BATT\n";
+                    recordSerialMonitor("pi_to_arduino", cmd);
                     port.write(cmd, (err) => { if (err) console.log("Serial write error:", err.message); });
                 }
 
@@ -502,6 +588,19 @@ if (ENABLE_API_SERVER) {
             clearLogs();
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ ok: true }));
+            return;
+        }
+
+        if (pathname === "/api/serial-monitor" && req.method === "GET") {
+            const since = Number.parseInt(requestUrl.searchParams.get("since") || "0", 10);
+            const safeSince = Number.isFinite(since) ? since : 0;
+            const entries = serialMonitorEntries.filter((entry) => entry.id > safeSince);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+                ok: true,
+                entries,
+                latest_id: serialMonitorEntries.length ? serialMonitorEntries[serialMonitorEntries.length - 1].id : 0
+            }));
             return;
         }
 

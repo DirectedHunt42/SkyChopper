@@ -21,7 +21,11 @@ const closeLogs = document.getElementById('close-logs');
 const logTableWrap = document.getElementById('log-table-wrap');
 const logTableBody = document.getElementById('log-table-body');
 const logLinesCount = document.getElementById('log-lines-count');
+const serialMonitorPanel = document.getElementById('serial-monitor-panel');
+const toggleSerialMonitorBtn = document.getElementById('toggle-serial-monitor');
+const serialMonitorFeed = document.getElementById('serial-monitor-feed');
 let logAutoRefreshTimer = null;
+let serialMonitorTimer = null;
 const confirmBackdrop = document.getElementById('confirm-backdrop');
 const confirmCancel = document.getElementById('confirm-cancel');
 const confirmReset = document.getElementById('confirm-reset');
@@ -39,6 +43,11 @@ const inputSimFallback = document.getElementById('setting-sim-fallback');
 const logChart = document.getElementById('logChart');
 const logChartCtx = logChart ? logChart.getContext('2d') : null;
 let logRowsCache = [];
+let logHeaderCache = [];
+let serialMonitorEntries = [];
+let serialMonitorLatestId = 0;
+let logModalOpenedAt = 0;
+let serialMonitorVisible = false;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
@@ -305,6 +314,12 @@ function openLogsModal() {
     if (!logsBackdrop) return;
     logsBackdrop.classList.add("open");
     logsBackdrop.setAttribute("aria-hidden", "false");
+    logModalOpenedAt = Date.now();
+    serialMonitorEntries = [];
+    serialMonitorLatestId = 0;
+    serialMonitorVisible = false;
+    updateSerialMonitorVisibility();
+    renderSerialMonitor();
 }
 
 function closeLogsModal() {
@@ -315,15 +330,127 @@ function closeLogsModal() {
         clearInterval(logAutoRefreshTimer);
         logAutoRefreshTimer = null;
     }
+    if (serialMonitorTimer) {
+        clearInterval(serialMonitorTimer);
+        serialMonitorTimer = null;
+    }
+    serialMonitorEntries = [];
+    serialMonitorLatestId = 0;
+    serialMonitorVisible = false;
+    updateSerialMonitorVisibility();
+    renderSerialMonitor();
 }
 
-function renderLogTable(rows) {
+function parseCsvRows(text) {
+    const trimmed = String(text || "").trim();
+    if (!trimmed) {
+        return { header: [], rows: [] };
+    }
+
+    const lines = trimmed.split(/\r?\n/).filter(Boolean);
+    const header = (lines[0] || "").split(",").map((cell) => cell.trim());
+    const rows = lines.slice(1).map((line) => {
+        const cells = line.split(",");
+        return header.map((_, index) => cells[index] ?? "");
+    });
+
+    return { header, rows };
+}
+
+function getLogCell(row, headerMap, key, fallbackIndex = -1) {
+    const index = headerMap.get(key);
+    if (typeof index === "number") {
+        return row[index] ?? "";
+    }
+    return fallbackIndex >= 0 ? (row[fallbackIndex] ?? "") : "";
+}
+
+function updateSerialMonitorVisibility() {
+    if (serialMonitorPanel) {
+        serialMonitorPanel.hidden = !serialMonitorVisible;
+    }
+    if (toggleSerialMonitorBtn) {
+        toggleSerialMonitorBtn.textContent = serialMonitorVisible ? "Hide Serial Monitor" : "Show Serial Monitor";
+    }
+}
+
+function renderSerialMonitor() {
+    if (!serialMonitorFeed) return;
+    serialMonitorFeed.innerHTML = "";
+
+    if (!serialMonitorEntries.length) {
+        const empty = document.createElement("div");
+        empty.className = "serial-monitor-empty";
+        empty.textContent = "Waiting for serial traffic...";
+        serialMonitorFeed.appendChild(empty);
+        return;
+    }
+
+    serialMonitorEntries.forEach((entry) => {
+        const row = document.createElement("div");
+        const outbound = entry.direction === "pi_to_arduino";
+        row.className = `serial-monitor-row ${outbound ? "outbound" : "inbound"}`;
+
+        const time = document.createElement("div");
+        time.className = "serial-monitor-time";
+        time.textContent = entry.time_iso || "";
+
+        const dir = document.createElement("div");
+        dir.className = "serial-monitor-dir";
+        dir.textContent = outbound ? "Pi -> Arduino" : "Arduino -> Pi";
+
+        const message = document.createElement("div");
+        message.className = "serial-monitor-message";
+        message.textContent = entry.message || "";
+
+        row.appendChild(time);
+        row.appendChild(dir);
+        row.appendChild(message);
+        serialMonitorFeed.appendChild(row);
+    });
+
+    requestAnimationFrame(() => {
+        serialMonitorFeed.scrollTop = serialMonitorFeed.scrollHeight;
+    });
+}
+
+async function loadSerialMonitor() {
+    if (!serialMonitorFeed || !logsBackdrop?.classList.contains("open")) return;
+    try {
+        const res = await fetch(`${API_BASE}/api/serial-monitor?since=${serialMonitorLatestId}`, { cache: "no-store" });
+        if (!res.ok) throw new Error("serial monitor fetch failed");
+        const payload = await res.json();
+        const incoming = Array.isArray(payload.entries) ? payload.entries : [];
+        serialMonitorLatestId = Number.isFinite(payload.latest_id) ? payload.latest_id : serialMonitorLatestId;
+
+        if (incoming.length) {
+            const filtered = incoming.filter((entry) => {
+                const entryTime = Date.parse(entry.time_iso);
+                return !Number.isFinite(entryTime) || entryTime >= logModalOpenedAt;
+            });
+            if (filtered.length) {
+                serialMonitorEntries.push(...filtered);
+                if (serialMonitorEntries.length > 300) {
+                    serialMonitorEntries = serialMonitorEntries.slice(-300);
+                }
+                renderSerialMonitor();
+            }
+        }
+    } catch {
+        if (!serialMonitorEntries.length) {
+            renderSerialMonitor();
+        }
+    }
+}
+
+function renderLogTable(rows, header = []) {
     if (!logTableBody) return;
     logTableBody.innerHTML = "";
+    const headerMap = new Map(header.map((name, index) => [name, index]));
     if (!rows.length) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 4;
+        td.colSpan = 5;
         td.textContent = "No log data yet.";
         tr.appendChild(td);
         logTableBody.appendChild(tr);
@@ -331,11 +458,18 @@ function renderLogTable(rows) {
     }
     rows.forEach((row) => {
         const tr = document.createElement("tr");
-        for (let i = 0; i < 4; i++) {
+        const cells = [
+            getLogCell(row, headerMap, "time_iso", 0),
+            getLogCell(row, headerMap, "batt_voltage", 1),
+            getLogCell(row, headerMap, "source_voltage", 2),
+            getLogCell(row, headerMap, "buck_voltage", 3),
+            getLogCell(row, headerMap, "relay_mode", 4)
+        ];
+        cells.forEach((value) => {
             const td = document.createElement("td");
-            td.textContent = row[i] ?? "";
+            td.textContent = value;
             tr.appendChild(td);
-        }
+        });
         logTableBody.appendChild(tr);
     });
 }
@@ -361,11 +495,12 @@ function renderLogChart(rows) {
     const displayNow = now - LOG_DISPLAY_LAG_MS;
     const windowMs = LOG_WINDOW_MS + LOG_WINDOW_PAD_MS;
 
+    const headerMap = new Map(logHeaderCache.map((name, index) => [name, index]));
     const parsed = rows.map((row) => ({
-        t: Date.parse(row[0]),
-        batt: Number.parseFloat(row[1]),
-        source: Number.parseFloat(row[2]),
-        buck: Number.parseFloat(row[3])
+        t: Date.parse(getLogCell(row, headerMap, "time_iso", 0)),
+        batt: Number.parseFloat(getLogCell(row, headerMap, "batt_voltage", 1)),
+        source: Number.parseFloat(getLogCell(row, headerMap, "source_voltage", 2)),
+        buck: Number.parseFloat(getLogCell(row, headerMap, "buck_voltage", 3))
     })).filter((d) => Number.isFinite(d.t));
 
     const slice = parsed.filter((d) => d.t >= displayNow - windowMs && d.t <= displayNow);
@@ -512,10 +647,9 @@ async function loadLogTable() {
         const res = await fetch("data/log.csv", { cache: "no-store" });
         if (!res.ok) throw new Error("log fetch failed");
         const text = await res.text();
-        const lines = text.trim().split(/\r?\n/);
-        const rows = lines.length > 1
-            ? lines.slice(1).map((line) => line.split(","))
-            : [];
+        const parsedCsv = parseCsvRows(text);
+        const rows = parsedCsv.rows;
+        logHeaderCache = parsedCsv.header;
 
         if (logLinesCount) {
             const count = rows.length;
@@ -526,7 +660,7 @@ async function loadLogTable() {
             ? (logTableWrap.scrollHeight - logTableWrap.scrollTop - logTableWrap.clientHeight) < 24
             : true;
 
-        renderLogTable(rows);
+        renderLogTable(rows, logHeaderCache);
         logRowsCache = rows;
         renderLogChart(rows);
 
@@ -538,7 +672,8 @@ async function loadLogTable() {
             });
         }
     } catch {
-        renderLogTable([]);
+        logHeaderCache = [];
+        renderLogTable([], []);
         renderLogChart([]);
 
         if (logLinesCount) {
@@ -848,11 +983,22 @@ if (openLogs) {
         openLogsModal();
         resizeLogChart();
         loadLogTable();
+        loadSerialMonitor();
         if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(loadLogTable, 5000);
+        if (!serialMonitorTimer) serialMonitorTimer = setInterval(loadSerialMonitor, 1000);
     });
 }
 if (closeLogs) closeLogs.addEventListener("click", closeLogsModal);
 if (logsBackdrop) logsBackdrop.addEventListener("click", (e) => { if (e.target === logsBackdrop) closeLogsModal(); });
+if (toggleSerialMonitorBtn) {
+    toggleSerialMonitorBtn.addEventListener("click", () => {
+        serialMonitorVisible = !serialMonitorVisible;
+        updateSerialMonitorVisibility();
+        if (serialMonitorVisible) {
+            renderSerialMonitor();
+        }
+    });
+}
 if (downloadLog) {
     downloadLog.addEventListener("click", async () => {
         try {

@@ -374,6 +374,62 @@ h1 {
     font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
+.serial-monitor-panel {
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    background: #0b1120;
+    padding: 12px;
+}
+
+.serial-monitor-feed {
+    margin-top: 10px;
+    border: 1px solid rgba(31, 41, 55, 0.7);
+    border-radius: 10px;
+    background: #020617;
+    min-height: 180px;
+    max-height: 240px;
+    overflow: auto;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+}
+
+.serial-monitor-row {
+    display: grid;
+    grid-template-columns: 148px 120px minmax(0, 1fr);
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(31, 41, 55, 0.7);
+    color: var(--ink);
+}
+
+.serial-monitor-row:last-child {
+    border-bottom: none;
+}
+
+.serial-monitor-row.outbound {
+    background: rgba(56, 189, 248, 0.08);
+}
+
+.serial-monitor-row.inbound {
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.serial-monitor-time,
+.serial-monitor-dir {
+    color: var(--muted);
+}
+
+.serial-monitor-message {
+    color: var(--ink);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.serial-monitor-empty {
+    padding: 18px;
+    color: var(--muted);
+}
+
 .status-row {
     display: flex;
     flex-wrap: wrap;
