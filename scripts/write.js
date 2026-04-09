@@ -508,18 +508,15 @@ async function loadSerialMonitor(isRefresh = false) {
 
         if (incoming.length) {
             if (isRefresh) {
-                // For refresh, replace the entries
-                serialMonitorEntries = incoming.slice(-10);
+                // On refresh, keep the latest 10 entries without wiping the buffer.
+                serialMonitorEntries = serialMonitorEntries.concat(incoming).slice(-10);
             } else {
-                // For incremental, append and filter
+                // For incremental, append and keep the newest 10.
                 const filtered = incoming.filter((entry) => {
                     const entryTime = Date.parse(entry.time_iso);
                     return !Number.isFinite(entryTime) || entryTime >= serialMonitorOpenedAt;
                 });
-                serialMonitorEntries.push(...filtered);
-                if (serialMonitorEntries.length > 10) {
-                    serialMonitorEntries = serialMonitorEntries.slice(-10);
-                }
+                serialMonitorEntries = serialMonitorEntries.concat(filtered).slice(-10);
             }
             renderSerialMonitor();
         }
@@ -773,12 +770,12 @@ async function loadLogTable() {
         } else {
             console.log('Log fetch error:', err.message);
         }
-        logHeaderCache = [];
-        renderLogTable([], []);
-        renderLogChart([]);
+        // Preserve the last successful log view when the fetch fails.
+        renderLogTable(logRowsCache, logHeaderCache);
+        renderLogChart(logRowsCache);
 
         if (logLinesCount) {
-            logLinesCount.textContent = `0 / 1 000 000 000 log lines used`;
+            logLinesCount.textContent = 'Error loading logs';
         }
     }
 }
