@@ -731,7 +731,13 @@ function renderLogChart(rows) {
 async function loadLogTable() {
     if (!logTableBody) return;
     try {
-        const res = await fetch(`${API_BASE}/api/logs?limit=${MAX_LOG_ROWS}`, { cache: "no-store" });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        const res = await fetch(`${API_BASE}/api/logs?limit=${MAX_LOG_ROWS}`, { 
+            cache: "no-store", 
+            signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error("log fetch failed");
         const payload = await res.json();
         const rows = Array.isArray(payload.rows) ? payload.rows.slice(-MAX_LOG_ROWS) : [];
@@ -758,7 +764,12 @@ async function loadLogTable() {
                 }
             });
         }
-    } catch {
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            console.log('Log fetch timed out after 10 seconds');
+        } else {
+            console.log('Log fetch error:', err.message);
+        }
         logHeaderCache = [];
         renderLogTable([], []);
         renderLogChart([]);
