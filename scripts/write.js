@@ -355,6 +355,8 @@ function openLogsModal() {
     if (!logsBackdrop) return;
     logsBackdrop.classList.add("open");
     logsBackdrop.setAttribute("aria-hidden", "false");
+    loadLogTable();
+    logAutoRefreshTimer = setInterval(loadLogTable, LOG_REFRESH_MS);
 }
 
 function closeLogsModal() {
@@ -430,6 +432,7 @@ function openSerialMonitorModal() {
     resetSerialMonitorState();
     updateSerialMonitorVisibility();
     loadSerialMonitor();
+    serialMonitorTimer = setInterval(() => loadSerialMonitor(true), 5000);
 }
 
 function closeSerialMonitorModal() {
