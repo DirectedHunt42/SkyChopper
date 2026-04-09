@@ -180,6 +180,13 @@ function countLogLines() {
     }
 }
 
+function readFileSegment(fd, start, length) {
+    if (!Number.isFinite(length) || length <= 0) return "";
+    const buffer = Buffer.alloc(length);
+    const bytesRead = fs.readSync(fd, buffer, 0, length, start);
+    return buffer.toString("utf8", 0, bytesRead);
+}
+
 function readLastLogRows(limit = 120) {
     ensureDataFolder();
     ensureLogHeader();
@@ -192,33 +199,43 @@ function readLastLogRows(limit = 120) {
         };
     }
 
-    const headerText = fs.readFileSync(logFile, { encoding: "utf8", start: 0, end: 4095 });
-    const header = (headerText.split(/\r?\n/)[0] || LOG_HEADER).split(",");
-
     const stat = fs.statSync(logFile);
+    if (stat.size <= 0) {
+        return {
+            header: LOG_HEADER.split(","),
+            rows: [],
+            total_lines: logLineCount
+        };
+    }
+
     const chunkSize = 64 * 1024;
     let position = stat.size;
     let remaining = "";
     const rows = [];
+    let header = LOG_HEADER.split(",");
+    const fd = fs.openSync(logFile, "r");
 
-    while (position > 0 && rows.length <= limit) {
-        const readSize = Math.min(chunkSize, position);
-        position -= readSize;
-        const chunk = fs.readFileSync(logFile, {
-            encoding: "utf8",
-            start: position,
-            end: position + readSize - 1
-        });
-        const text = chunk + remaining;
-        const parts = text.split(/\r?\n/);
-        remaining = parts.shift();
-        rows.unshift(...parts.filter(Boolean));
-        if (rows.length > limit) {
-            rows.splice(0, rows.length - limit);
+    try {
+        const headerText = readFileSegment(fd, 0, Math.min(4096, stat.size));
+        header = (headerText.split(/\r?\n/)[0] || LOG_HEADER).split(",");
+
+        while (position > 0 && rows.length <= limit) {
+            const readSize = Math.min(chunkSize, position);
+            position -= readSize;
+            const chunk = readFileSegment(fd, position, readSize);
+            const text = chunk + remaining;
+            const parts = text.split(/\r?\n/);
+            remaining = parts.shift() || "";
+            rows.unshift(...parts.filter(Boolean));
+            if (rows.length > limit) {
+                rows.splice(0, rows.length - limit);
+            }
         }
+    } finally {
+        fs.closeSync(fd);
     }
 
-    if (remaining && rows.length < limit) {
+    if (remaining && rows.length < limit && remaining !== header.join(",")) {
         rows.unshift(remaining);
     }
 
