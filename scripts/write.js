@@ -26,6 +26,8 @@ const logLinesCount = document.getElementById('log-lines-count');
 const serialMonitorPanel = document.getElementById('serial-monitor-panel');
 const toggleSerialMonitorBtn = document.getElementById('toggle-serial-monitor');
 const serialMonitorFeed = document.getElementById('serial-monitor-feed');
+const refreshLogBtn = document.getElementById('refresh-log');
+const refreshSerialBtn = document.getElementById('refresh-serial');
 const settingsVersion = document.getElementById('settings-version');
 let logAutoRefreshTimer = null;
 let serialMonitorTimer = null;
@@ -51,13 +53,13 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.1.1";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
 const LOG_LEFT_HIDE_MS = 10000;
-const MAX_LOG_ROWS = 40;
-const LOG_CHART_ROWS = 30;
+const MAX_LOG_ROWS = 120;
+const LOG_CHART_ROWS = 120;
 const LOG_REFRESH_MS = 15000;
 const confirmSim = document.getElementById('confirm-sim');
 const confirmSimCancel = document.getElementById('confirm-sim-cancel');
@@ -266,12 +268,39 @@ function fillSettingsForm() {
 }
 
 // NEW: Update the visual state of the three-switch
+function movePill(mode) {
+    if (!overrideSwitch) return;
+    const buttons = overrideSwitch.querySelectorAll(".switch-btn");
+    const pill = overrideSwitch.querySelector(".slider-pill");
+
+    let targetBtn = null;
+
+    buttons.forEach(btn => {
+        if (btn.dataset.mode === mode) {
+            targetBtn = btn;
+        }
+    });
+
+    if (!targetBtn || !pill) return;
+
+    const left = targetBtn.offsetLeft - 3;
+    const width = targetBtn.offsetWidth;
+
+    pill.style.transform = `translateX(${left}px)`;
+    pill.style.width = width + "px";
+
+    buttons.forEach(b => {
+        b.classList.toggle("active", b === targetBtn);
+    });
+}
+
 function updateOverrideSwitch() {
     if (!overrideSwitch) return;
     const mode = settingsState.power_override || "auto";
     overrideSwitch.querySelectorAll('.switch-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.mode === mode);
     });
+    movePill(mode);
 }
 
 function parseNum(value, fallback) {
@@ -401,9 +430,6 @@ function openSerialMonitorModal() {
     resetSerialMonitorState();
     updateSerialMonitorVisibility();
     loadSerialMonitor();
-    if (!serialMonitorTimer) {
-        serialMonitorTimer = setInterval(loadSerialMonitor, 1000);
-    }
 }
 
 function closeSerialMonitorModal() {
@@ -461,27 +487,38 @@ function renderSerialMonitor() {
     });
 }
 
-async function loadSerialMonitor() {
+async function loadSerialMonitor(isRefresh = false) {
     if (!serialMonitorFeed || !serialMonitorBackdrop?.classList.contains("open")) return;
     try {
-        const res = await fetch(`${API_BASE}/api/serial-monitor?since=${serialMonitorLatestId}`, { cache: "no-store" });
+        const params = new URLSearchParams();
+        if (isRefresh) {
+            params.set('limit', '10');
+            params.set('since', '0');
+        } else {
+            params.set('since', serialMonitorLatestId.toString());
+        }
+        const res = await fetch(`${API_BASE}/api/serial-monitor?${params}`, { cache: "no-store" });
         if (!res.ok) throw new Error("serial monitor fetch failed");
         const payload = await res.json();
         const incoming = Array.isArray(payload.entries) ? payload.entries : [];
         serialMonitorLatestId = Number.isFinite(payload.latest_id) ? payload.latest_id : serialMonitorLatestId;
 
         if (incoming.length) {
-            const filtered = incoming.filter((entry) => {
-                const entryTime = Date.parse(entry.time_iso);
-                return !Number.isFinite(entryTime) || entryTime >= serialMonitorOpenedAt;
-            });
-            if (filtered.length) {
+            if (isRefresh) {
+                // For refresh, replace the entries
+                serialMonitorEntries = incoming.slice(-10);
+            } else {
+                // For incremental, append and filter
+                const filtered = incoming.filter((entry) => {
+                    const entryTime = Date.parse(entry.time_iso);
+                    return !Number.isFinite(entryTime) || entryTime >= serialMonitorOpenedAt;
+                });
                 serialMonitorEntries.push(...filtered);
-                if (serialMonitorEntries.length > 300) {
-                    serialMonitorEntries = serialMonitorEntries.slice(-300);
+                if (serialMonitorEntries.length > 10) {
+                    serialMonitorEntries = serialMonitorEntries.slice(-10);
                 }
-                renderSerialMonitor();
             }
+            renderSerialMonitor();
         }
     } catch {
         if (!serialMonitorEntries.length) {
@@ -1030,7 +1067,6 @@ if (openLogs) {
         openLogsModal();
         resizeLogChart();
         loadLogTable();
-        if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(loadLogTable, LOG_REFRESH_MS);
     });
 }
 if (closeLogs) closeLogs.addEventListener("click", closeLogsModal);
@@ -1056,6 +1092,12 @@ if (downloadLog) {
         } catch { alert("Unable to download log.csv."); }
     });
 }
+if (refreshLogBtn) refreshLogBtn.addEventListener("click", () => {
+    loadLogTable();
+});
+if (refreshSerialBtn) refreshSerialBtn.addEventListener("click", () => {
+    loadSerialMonitor(true);
+});
 if (closeSettings) closeSettings.addEventListener("click", closeSettingsModal);
 if (settingsBackdrop) settingsBackdrop.addEventListener("click", (e) => { if (e.target === settingsBackdrop) closeSettingsModal(); });
 
@@ -1178,35 +1220,6 @@ if (confirmResetAllCancel) confirmResetAllCancel.addEventListener("click", close
 
 if (overrideSwitch) {
 
-    const buttons = overrideSwitch.querySelectorAll(".switch-btn");
-    const pill = overrideSwitch.querySelector(".slider-pill");
-
-    function movePill(mode) {
-
-        const buttons = overrideSwitch.querySelectorAll(".switch-btn");
-        const pill = overrideSwitch.querySelector(".slider-pill");
-
-        let targetBtn = null;
-
-        buttons.forEach(btn => {
-            if (btn.dataset.mode === mode) {
-                targetBtn = btn;
-            }
-        });
-
-        if (!targetBtn || !pill) return;
-
-        const left = targetBtn.offsetLeft - 3;
-        const width = targetBtn.offsetWidth;
-
-        pill.style.transform = `translateX(${left}px)`;
-        pill.style.width = width + "px";
-
-        buttons.forEach(b => {
-            b.classList.toggle("active", b === targetBtn);
-        });
-    }
-
     overrideSwitch.addEventListener("click", async (event) => {
 
         const btn = event.target.closest("button");
@@ -1231,18 +1244,6 @@ if (overrideSwitch) {
         }
 
     });
-
-    // update when settings load
-    const oldUpdate = updateOverrideSwitch;
-
-    updateOverrideSwitch = function () {
-
-        if (oldUpdate) oldUpdate();
-
-        const mode = settingsState.power_override || "auto";
-        movePill(mode);
-
-    };
 }
 
 function startPolling() {

@@ -651,8 +651,19 @@ if (ENABLE_API_SERVER) {
 
         if (pathname === "/api/serial-monitor" && req.method === "GET") {
             const since = Number.parseInt(requestUrl.searchParams.get("since") || "0", 10);
+            const limit = Number.parseInt(requestUrl.searchParams.get("limit") || "0", 10);
             const safeSince = Number.isFinite(since) ? since : 0;
-            const entries = serialMonitorEntries.filter((entry) => entry.id > safeSince);
+            const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(500, limit) : 0;
+
+            let entries;
+            if (safeLimit > 0) {
+                // Return the last 'limit' entries
+                entries = serialMonitorEntries.slice(-safeLimit);
+            } else {
+                // Original behavior: entries since 'since'
+                entries = serialMonitorEntries.filter((entry) => entry.id > safeSince);
+            }
+
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({
                 ok: true,
