@@ -1,7 +1,7 @@
 {
   "name": "skychopper",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.2",
   "scripts": {
     "read": "node scripts/read.js",
     "read:watch": "nodemon"

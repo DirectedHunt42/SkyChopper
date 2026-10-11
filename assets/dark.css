@@ -145,6 +145,40 @@ h1 {
     border-color: #334155;
 }
 
+.update-btn {
+    color: #86efac;
+}
+
+.update-output {
+    min-height: 180px;
+    max-height: 42vh;
+    overflow: auto;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    background: #070b14;
+    color: #cbd5e1;
+    font: 12px/1.5 "JetBrains Mono", monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.telemetry-mode-note {
+    grid-column: 1 / -1;
+}
+
+.source-only-mode .hero-actions .override-group,
+.source-only-mode .status-row,
+.source-only-mode .turbine,
+.source-only-mode .turbine-label {
+    display: none;
+}
+
+.source-only-mode .log-legend {
+    display: none;
+}
+
 
 .modal-backdrop {
     position: fixed;

@@ -2,6 +2,11 @@
 
 This diagram matches the current firmware in `arduino/arduino.ino`.
 
+For source-only monitoring, upload `arduino/source_voltage_only.ino`. It only
+uses `A1` and USB serial; leave the source divider and common ground connected
+as shown. The sketch uses a 3.13 divider ratio and 5.21 V ADC reference by
+default. Adjust those constants in the sketch to match your divider and board.
+
 **Assumptions**
 - Arduino Nano 5V (ATmega328P).
 - Relay module uses 5V logic and is *active-high*.

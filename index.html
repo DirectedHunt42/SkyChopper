@@ -70,6 +70,7 @@
             <div class="hero-actions">
                 <button class="settings-btn" id="open-settings" type="button">Settings</button>
                 <button class="settings-btn" id="open-logs" type="button">Logs</button>
+                <button class="settings-btn update-btn" id="open-update" type="button">Update</button>
                 
                 <!-- Three-position power override switch -->
                 <div class="override-group">
@@ -114,6 +115,24 @@
         </div>
     </div>
 
+    <div class="modal-backdrop" id="update-backdrop" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="update-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-eyebrow">Maintenance</div>
+                    <h2 id="update-title">Update SkyChopper</h2>
+                </div>
+                <button class="icon-btn" id="close-update" type="button" aria-label="Close update window">Close</button>
+            </div>
+            <div class="modal-note" id="update-status" role="status" aria-live="polite">Ready to update.</div>
+            <pre class="update-output" id="update-output" aria-label="Update progress output"></pre>
+            <div class="modal-actions">
+                <button class="ghost-btn" id="start-update" type="button">Start Update</button>
+            </div>
+            <div class="modal-note">The updater resets tracked local changes, pulls the latest Git version, then reruns setup. Untracked files are preserved.</div>
+        </div>
+    </div>
+
     <!-- SETTINGS MODAL (confirm-sim removed) -->
     <div class="modal-backdrop" id="settings-backdrop" aria-hidden="true">
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -121,11 +140,16 @@
                 <div>
                     <div class="modal-eyebrow">Configuration</div>
                     <h2 id="settings-title">Settings</h2>
-                    <div class="modal-note" id="settings-version">Version 0.0.0</div>
+                    <div class="modal-note" id="settings-version">Version 0.1.2</div>
                 </div>
                 <button class="icon-btn" id="close-settings" type="button" aria-label="Close settings">Close</button>
             </div>
             <div class="modal-body">
+                <div class="field checkbox-field">
+                    <label for="setting-source-voltage-only">Source voltage only</label>
+                    <input id="setting-source-voltage-only" type="checkbox" checked>
+                </div>
+                <div class="modal-note telemetry-mode-note">Enabled by default. Reads and records source voltage only; power decisions and simulator fallback are disabled.</div>
                 <div class="field">
                     <label for="setting-pack-full">Battery Full Voltage</label>
                     <input id="setting-pack-full" type="number" step="0.01">

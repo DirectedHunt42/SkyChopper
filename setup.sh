@@ -6,6 +6,8 @@ SERVICE_NAME="skychopper"
 NODE_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 NGINX_SITE="/etc/nginx/sites-available/${SERVICE_NAME}"
 NGINX_SITE_LINK="/etc/nginx/sites-enabled/${SERVICE_NAME}"
+UPDATE_COMMAND="/usr/local/sbin/skychopper-update"
+UPDATE_REPO_FILE="/etc/skychopper-update-repo"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Please run with sudo: sudo ./setup.sh"
@@ -92,6 +94,16 @@ EOF
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
+
+echo "Installing dashboard updater..."
+install -o root -g root -m 0755 "${ROOT_DIR}/scripts/update.sh" "${UPDATE_COMMAND}"
+printf '%s\n' "${ROOT_DIR}" > "${UPDATE_REPO_FILE}"
+chmod 0644 "${UPDATE_REPO_FILE}"
+mkdir -p /var/lib/skychopper
+if [[ ! -f /var/lib/skychopper/update-status ]]; then
+  printf '%s\n' "Ready to update." > /var/lib/skychopper/update-status
+fi
+chmod 0644 /var/lib/skychopper/update-status
 
 echo "Ensuring avahi is running for .local access..."
 systemctl enable avahi-daemon

@@ -1,6 +1,19 @@
-# SkyChopper Wind Dashboard
+<p align="center">
+  <img src="assets/favicon.ico" alt="SkyChopper" width="72" height="72">
+</p>
 
-A technical, canvas-driven telemetry UI for a wind turbine power system. The front end renders real-time cards from `data/status.json`, drives status indicators for source/battery health, animates the turbine based on pack voltage, and exposes modals to manage settings and logs. The backend runs on a Raspberry Pi, reads serial telemetry from an Arduino (or a simulator fallback), computes power decisions, logs CSV data, and serves a lightweight API for settings and maintenance actions.
+<h1 align="center">SkyChopper</h1>
+
+<p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
+
+## Overview
+
+SkyChopper combines a canvas-driven dashboard with a backend service for a
+wind turbine power system. The dashboard reads live status from
+`data/status.json`, shows source and battery health, animates the turbine from
+pack voltage, and provides controls for settings and logs. On a Raspberry Pi,
+the backend reads Arduino serial telemetry (or uses a simulator fallback),
+computes power decisions, logs CSV data, and serves a lightweight API.
 
 ## Features
 - HTML5 canvas rendering loop with layout that adapts to viewport width.
@@ -13,6 +26,10 @@ A technical, canvas-driven telemetry UI for a wind turbine power system. The fro
 
 ## Quick Start (Arduino + Raspberry Pi)
 1. Flash the Arduino with the telemetry sketch and connect it to the Pi over USB serial.
+
+   For source-voltage-only monitoring, upload `arduino/source_voltage_only.ino`
+   instead. It reads `A1` and sends only `source_voltage` once per second; the
+   original `arduino/arduino.ino` remains the full telemetry and relay sketch.
 
 2. On the Raspberry Pi, install dependencies:
 
@@ -59,6 +76,7 @@ node scripts/read.js
 The settings modal edits battery thresholds and writes JSON to `data/settings.json` using the local API server on port `8000` (configurable by `PORT`). The API server is enabled by default.
 
 ### Settings fields (`data/settings.json`)
+- `source_voltage_only`: Defaults to `true`. Reads and records source voltage only, suppresses power decisions, and disables simulator fallback. Turn it off to use full system telemetry.
 - `target_buck_voltage`: Target buck output voltage.
 - `source_expected_min_v`: Expected minimum source voltage.
 - `source_expected_max_v`: Expected maximum source voltage.
@@ -85,6 +103,7 @@ The UI reads `data/status.json` and supports the following fields:
 - `source_expected_min_v` (number)
 - `source_expected_max_v` (number)
 - `arduino_connected` (boolean)
+- `telemetry_mode` (`"source_only"` or `"full"`)
 
 Missing values are gracefully ignored; cards only render for keys present in the JSON.
 
@@ -93,6 +112,14 @@ All endpoints are served from `http://localhost:8000` by default.
 - `POST /api/settings`: Persist settings JSON. Body is merged over defaults.
 - `POST /api/reset-all`: Delete all data files and recreate defaults.
 - `POST /api/clear-logs`: Truncate `data/log.csv` to just the header.
+- `GET /api/update` and `POST /api/update`: Read update progress and start the installed updater.
+
+## Update from the dashboard
+On a Raspberry Pi installed from a Git checkout, choose **Update** in the
+dashboard and confirm. The updater resets tracked local changes, pulls the
+latest commit, and reruns `setup.sh` so the installed services match the
+updated repository. Untracked files are preserved. The progress window shows
+the updater status and recent output.
 
 ## Runtime Behavior
 - Polling: `fetch()` to `data/status.json` every 1000 ms (no cache) with graceful failure handling.
@@ -103,6 +130,8 @@ All endpoints are served from `http://localhost:8000` by default.
 
 ## Project Structure
 - `index.html`: Main dashboard shell and modal markup.
+- `arduino/arduino.ino`: Full telemetry and relay firmware (kept unchanged).
+- `arduino/source_voltage_only.ino`: Source voltage monitor firmware.
 - `assets/dark.css`: Dark theme styling.
 - `assets/light.css`: Light theme styling.
 - `scripts/write.js`: Front-end rendering, settings, and UI logic.

@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
+const { execFile } = require("child_process");
 
 const statusFile = path.join(__dirname, "../data/status.json");
 const settingsFile = path.join(__dirname, "../data/settings.json");
@@ -19,6 +20,7 @@ const defaultSettings = {
     batt_on_percent: 80,
     batt_off_percent: 60,
     sim_fallback_enabled: false,
+    source_voltage_only: true,
     power_override: "auto",
     title: 1
 };
@@ -26,11 +28,12 @@ const defaultSettings = {
 // Default status if missing
 const defaultStatus = {
     batt_voltage: 12.0,
-    source_voltage: 14.0,
+    source_voltage: 0,
     buck_voltage: 9.0,
     batt_percent: 85,
     use_source: false,
     system_on: false,
+    telemetry_mode: "source_only",
     time: Date.now()
 };
 
@@ -276,6 +279,17 @@ function maybeLog(telemetry) {
     trimLogIfNeeded();
 }
 
+function writeSourceOnlyStatus(sourceVoltage) {
+    const payload = {
+        source_voltage: sourceVoltage,
+        telemetry_mode: "source_only",
+        arduino_connected: true,
+        time: Date.now()
+    };
+    fs.writeFileSync(statusFile, JSON.stringify(payload, null, 2));
+    maybeLog({ source_voltage: sourceVoltage });
+}
+
 countLogLines();
 
 function loadSettings() {
@@ -353,6 +367,7 @@ function writeStatus(telemetry, decision) {
     ensureDataFolder();
     const payload = {
         ...telemetry,
+        telemetry_mode: "full",
         batt_percent: decision.battPercent,
         use_source: decision.useSource,
         system_on: decision.systemOn,
@@ -417,6 +432,19 @@ function attemptSerialConnection() {
             try {
                 const data = JSON.parse(text);
                 console.log(`✅ Parsed Arduino data → batt=${data.batt_voltage?.toFixed(2)}V source=${data.source_voltage?.toFixed(2)}V buck=${data.buck_voltage?.toFixed(2)}V relay=${data.relay_state}`);
+
+                const sourceOnlyMode = loadSettings().source_voltage_only === true;
+                const sourceOnlyPacket = Number.isFinite(data.source_voltage)
+                    && !Number.isFinite(data.batt_voltage)
+                    && !Number.isFinite(data.buck_voltage);
+                if (sourceOnlyMode) {
+                    if (Number.isFinite(data.source_voltage)) writeSourceOnlyStatus(data.source_voltage);
+                    return;
+                }
+                if (sourceOnlyPacket && Number.isFinite(data.source_voltage)) {
+                    writeSourceOnlyStatus(data.source_voltage);
+                    return;
+                }
 
                 const decision = computeDecision(data, lastDecision);
                 decision.arduinoConnected = true;
@@ -576,6 +604,10 @@ function syncSimulatorFallback() {
         return;
     }
     const settings = loadSettings();
+    if (settings.source_voltage_only === true) {
+        stopSimulator();
+        return;
+    }
     const simEnabled = typeof settings.sim_fallback_enabled === "boolean"
         ? settings.sim_fallback_enabled
         : defaultSettings.sim_fallback_enabled;
@@ -654,6 +686,35 @@ if (ENABLE_API_SERVER) {
             clearLogs();
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ ok: true }));
+            return;
+        }
+
+        if (pathname === "/api/update" && req.method === "POST") {
+            const updater = "/usr/local/sbin/skychopper-update";
+            execFile(updater, [], (error) => {
+                if (error) {
+                    res.writeHead(500, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: false, error: error.message }));
+                    return;
+                }
+                res.writeHead(202, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: true }));
+            });
+            return;
+        }
+
+        if (pathname === "/api/update" && req.method === "GET") {
+            const statusPath = "/var/lib/skychopper/update-status";
+            const updateLogPath = "/var/log/skychopper-update.log";
+            const status = fs.existsSync(statusPath) ? fs.readFileSync(statusPath, "utf8").trim() : "Updater is not installed.";
+            let output = "";
+            try {
+                const lines = fs.readFileSync(updateLogPath, "utf8").split(/\r?\n/);
+                output = lines.slice(-100).join("\n");
+            } catch {}
+            const done = status === "Update complete." || status.startsWith("Update failed");
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, status, output, done }));
             return;
         }
 

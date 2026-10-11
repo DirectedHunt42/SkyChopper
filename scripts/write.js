@@ -22,6 +22,7 @@ const serialMonitorBackdrop = document.getElementById('serial-monitor-backdrop')
 const closeSerialMonitor = document.getElementById('close-serial-monitor');
 const logTableWrap = document.getElementById('log-table-wrap');
 const logTableBody = document.getElementById('log-table-body');
+const logTableHead = document.querySelector('#log-table thead tr');
 const logLinesCount = document.getElementById('log-lines-count');
 const serialMonitorPanel = document.getElementById('serial-monitor-panel');
 const toggleSerialMonitorBtn = document.getElementById('toggle-serial-monitor');
@@ -29,6 +30,11 @@ const serialMonitorFeed = document.getElementById('serial-monitor-feed');
 const refreshLogBtn = document.getElementById('refresh-log');
 const refreshSerialBtn = document.getElementById('refresh-serial');
 const settingsVersion = document.getElementById('settings-version');
+const updateBackdrop = document.getElementById('update-backdrop');
+const updateStatus = document.getElementById('update-status');
+const updateOutput = document.getElementById('update-output');
+const startUpdateButton = document.getElementById('start-update');
+let updatePollTimer = null;
 let logAutoRefreshTimer = null;
 let serialMonitorTimer = null;
 const confirmBackdrop = document.getElementById('confirm-backdrop');
@@ -45,6 +51,7 @@ const inputPackEmpty = document.getElementById('setting-pack-empty');
 const inputOnPercent = document.getElementById('setting-on-percent');
 const inputOffPercent = document.getElementById('setting-off-percent');
 const inputSimFallback = document.getElementById('setting-sim-fallback');
+const inputSourceVoltageOnly = document.getElementById('setting-source-voltage-only');
 const logChart = document.getElementById('logChart');
 const logChartCtx = logChart ? logChart.getContext('2d') : null;
 let logRowsCache = [];
@@ -53,7 +60,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "0.1.1";
+const APP_VERSION = "0.1.2";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -121,6 +128,7 @@ const settingsDefaults = {
     batt_on_percent: 80,
     batt_off_percent: 60,
     sim_fallback_enabled: true,
+    source_voltage_only: true,
     power_override: "auto",
     title: 1
 };
@@ -230,6 +238,9 @@ function resizeLogChart() {
 
 function applySettings(next) {
     settingsState = { ...settingsState, ...next };
+    if (typeof settingsState.source_voltage_only !== "boolean") settingsState.source_voltage_only = true;
+    if (settingsState.source_voltage_only) settingsState.sim_fallback_enabled = false;
+    document.body.classList.toggle("source-only-mode", settingsState.source_voltage_only);
     if (typeof settingsState.sim_fallback_enabled !== "boolean") {
         settingsState.sim_fallback_enabled = settingsDefaults.sim_fallback_enabled;
     }
@@ -265,6 +276,7 @@ function fillSettingsForm() {
     if (inputSimFallback) {
         inputSimFallback.checked = Boolean(settingsState.sim_fallback_enabled);
     }
+    if (inputSourceVoltageOnly) inputSourceVoltageOnly.checked = settingsState.source_voltage_only;
 }
 
 // NEW: Update the visual state of the three-switch
@@ -529,12 +541,22 @@ async function loadSerialMonitor(isRefresh = false) {
 
 function renderLogTable(rows, header = []) {
     if (!logTableBody) return;
+    const sourceOnly = document.body.classList.contains("source-only-mode");
+    if (logTableHead) {
+        logTableHead.innerHTML = "";
+        (sourceOnly ? ["Time (ISO)", "Source (V)"] : ["Time (ISO)", "Battery (V)", "Source (V)", "Buck (V)", "Relay Mode"])
+            .forEach((label) => {
+                const th = document.createElement("th");
+                th.textContent = label;
+                logTableHead.appendChild(th);
+            });
+    }
     logTableBody.innerHTML = "";
     const headerMap = new Map(header.map((name, index) => [name, index]));
     if (!rows.length) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 5;
+        td.colSpan = sourceOnly ? 2 : 5;
         td.textContent = "No log data yet.";
         tr.appendChild(td);
         logTableBody.appendChild(tr);
@@ -543,13 +565,15 @@ function renderLogTable(rows, header = []) {
     const fragment = document.createDocumentFragment();
     rows.forEach((row) => {
         const tr = document.createElement("tr");
-        const cells = [
-            getLogCell(row, headerMap, "time_iso", 0),
-            getLogCell(row, headerMap, "batt_voltage", 1),
-            getLogCell(row, headerMap, "source_voltage", 2),
-            getLogCell(row, headerMap, "buck_voltage", 3),
-            getLogCell(row, headerMap, "relay_mode", 4)
-        ];
+        const cells = sourceOnly
+            ? [getLogCell(row, headerMap, "time_iso", 0), getLogCell(row, headerMap, "source_voltage", 2)]
+            : [
+                getLogCell(row, headerMap, "time_iso", 0),
+                getLogCell(row, headerMap, "batt_voltage", 1),
+                getLogCell(row, headerMap, "source_voltage", 2),
+                getLogCell(row, headerMap, "buck_voltage", 3),
+                getLogCell(row, headerMap, "relay_mode", 4)
+            ];
         cells.forEach((value) => {
             const td = document.createElement("td");
             td.textContent = value;
@@ -562,6 +586,8 @@ function renderLogTable(rows, header = []) {
 
 function renderLogChart(rows) {
     if (!logChart || !logChartCtx) return;
+    const chartTitle = document.querySelector(".log-chart-title");
+    if (chartTitle) chartTitle.textContent = document.body.classList.contains("source-only-mode") ? "Source Voltage Trend" : "Voltage Trend";
     const ctx2d = logChartCtx;
     const scale = window.devicePixelRatio || 1;
     const width = logChart.width / scale;
@@ -605,7 +631,7 @@ function renderLogChart(rows) {
     let minV = Infinity;
     let maxV = -Infinity;
     smoothSlice.forEach((d) => {
-        [d.batt, d.source, d.buck].forEach((v) => {
+        (document.body.classList.contains("source-only-mode") ? [d.source] : [d.batt, d.source, d.buck]).forEach((v) => {
             if (Number.isFinite(v)) {
                 minV = Math.min(minV, v);
                 maxV = Math.max(maxV, v);
@@ -716,9 +742,9 @@ function renderLogChart(rows) {
         ctx2d.stroke();
     };
 
-    drawSmoothSeries("batt", palette.good);
+    if (!document.body.classList.contains("source-only-mode")) drawSmoothSeries("batt", palette.good);
     drawSmoothSeries("source", palette.warn);
-    drawSmoothSeries("buck", palette.accent);
+    if (!document.body.classList.contains("source-only-mode")) drawSmoothSeries("buck", palette.accent);
 
     ctx2d.strokeStyle = palette.ink;
     ctx2d.lineWidth = 1.6;
@@ -786,6 +812,7 @@ async function updateData() {
         const d = await res.json();
         targetStatus = normalizeStatus(d);
         availableKeys = new Set(Object.keys(d || {}));
+        document.body.classList.toggle("source-only-mode", settingsState.source_voltage_only || d.telemetry_mode === "source_only");
 
         if (statusSource) {
             const srcV = Number.isFinite(d.source_voltage) ? d.source_voltage : status.source_voltage;
@@ -910,7 +937,8 @@ function draw() {
     };
 
     const blocks = [];
-    if (availableKeys.has("batt_voltage") || availableKeys.has("batt_percent")) {
+    const sourceOnlyMode = document.body.classList.contains("source-only-mode");
+    if (!sourceOnlyMode && (availableKeys.has("batt_voltage") || availableKeys.has("batt_percent"))) {
         blocks.push({
             label: "Battery",
             value: `${status.batt_voltage.toFixed(2)} V\n${status.batt_percent.toFixed(1)} %`,
@@ -924,7 +952,7 @@ function draw() {
             level: getSourceLevel()
         });
     }
-    if (availableKeys.has("buck_voltage")) {
+    if (!sourceOnlyMode && availableKeys.has("buck_voltage")) {
         const targetBuck = Number.isFinite(settingsState.target_buck_voltage)
             ? settingsState.target_buck_voltage
             : settingsDefaults.target_buck_voltage;
@@ -935,7 +963,7 @@ function draw() {
             level: buckDelta <= 0.5 ? "good" : "danger"
         });
     }
-    if (availableKeys.has("use_source") || availableKeys.has("system_on")) {
+    if (!sourceOnlyMode && (availableKeys.has("use_source") || availableKeys.has("system_on"))) {
         const isUsingSource = Boolean(status.use_source);
         blocks.push({
             label: "Power Mode",
@@ -943,21 +971,21 @@ function draw() {
             level: isUsingSource ? "warn" : "good"
         });
     }
-    if (availableKeys.has("rpm")) {
+    if (!sourceOnlyMode && availableKeys.has("rpm")) {
         blocks.push({
             label: "RPM",
             value: `${Math.round(status.rpm)}`,
             level: "good"
         });
     }
-    if (availableKeys.has("current")) {
+    if (!sourceOnlyMode && availableKeys.has("current")) {
         blocks.push({
             label: "Current",
             value: `${status.current.toFixed(2)} A`,
             level: status.current < 10 ? "good" : "danger"
         });
     }
-    if (availableKeys.has("dump_load")) {
+    if (!sourceOnlyMode && availableKeys.has("dump_load")) {
         blocks.push({
             label: "Dump Load",
             value: `${status.dump_load ? "ON" : "OFF"}`,
@@ -1116,6 +1144,7 @@ if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener("click", () => {
 
         const next = {
+            source_voltage_only: Boolean(inputSourceVoltageOnly?.checked),
             batt_full_voltage: parseNum(inputPackFull?.value, settingsState.batt_full_voltage),
             batt_empty_voltage: parseNum(inputPackEmpty?.value, settingsState.batt_empty_voltage),
             batt_on_percent: parseNum(inputOnPercent?.value, settingsState.batt_on_percent),
@@ -1123,7 +1152,7 @@ if (saveSettingsBtn) {
             sim_fallback_enabled: Boolean(inputSimFallback?.checked)
         };
 
-        const enablingSim = next.sim_fallback_enabled && !settingsState.sim_fallback_enabled;
+        const enablingSim = next.sim_fallback_enabled && !next.source_voltage_only && !settingsState.sim_fallback_enabled;
 
         if (enablingSim) {
             window._pendingSettings = next;
@@ -1178,6 +1207,59 @@ async function postAction(path) {
     const res = await fetch(`${API_BASE}${path}`, { method: "POST" });
     if (!res.ok) throw new Error("Request failed");
 }
+
+function closeUpdateModal() {
+    if (updateBackdrop) {
+        updateBackdrop.classList.remove("open");
+        updateBackdrop.setAttribute("aria-hidden", "true");
+    }
+    if (updatePollTimer) clearInterval(updatePollTimer);
+    updatePollTimer = null;
+}
+
+async function refreshUpdateStatus() {
+    try {
+        const response = await fetch(`${API_BASE}/api/update`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || "Unable to read update status");
+        updateStatus.textContent = data.status;
+        updateOutput.textContent = data.output || "No updater output yet.";
+        updateOutput.scrollTop = updateOutput.scrollHeight;
+        startUpdateButton.disabled = !data.done && data.status !== "Ready to update." && data.status !== "Update complete.";
+        if (data.done) {
+            startUpdateButton.disabled = false;
+            if (updatePollTimer) clearInterval(updatePollTimer);
+            updatePollTimer = null;
+        }
+    } catch (error) {
+        updateStatus.textContent = "Waiting for SkyChopper to reconnect...";
+    }
+}
+
+document.getElementById("open-update")?.addEventListener("click", () => {
+    updateBackdrop.classList.add("open");
+    updateBackdrop.setAttribute("aria-hidden", "false");
+    refreshUpdateStatus();
+    if (!updatePollTimer) updatePollTimer = setInterval(refreshUpdateStatus, 2000);
+});
+document.getElementById("close-update")?.addEventListener("click", closeUpdateModal);
+updateBackdrop?.addEventListener("click", (event) => { if (event.target === updateBackdrop) closeUpdateModal(); });
+startUpdateButton?.addEventListener("click", async () => {
+    if (!window.confirm("Update SkyChopper now? This discards tracked local changes, pulls the latest repository version, and reruns setup.")) return;
+    startUpdateButton.disabled = true;
+    updateStatus.textContent = "Starting SkyChopper update...";
+    updateOutput.textContent = "";
+    try {
+        const response = await fetch(`${API_BASE}/api/update`, { method: "POST" });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || "Could not start update");
+        if (!updatePollTimer) updatePollTimer = setInterval(refreshUpdateStatus, 2000);
+        refreshUpdateStatus();
+    } catch (error) {
+        updateStatus.textContent = `Update failed to start: ${error.message}`;
+        startUpdateButton.disabled = false;
+    }
+});
 
 if (confirmClearLogsOk) {
     confirmClearLogsOk.addEventListener("click", async () => {
