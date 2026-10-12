@@ -199,7 +199,7 @@ body.update-open { overflow: hidden; }
 .log-table tr:hover td { background: #1d1d1d; }
 .card-footer, .modal-note, .map-note { margin-top: 9px; color: var(--dim); font-size: 10px; }
 .card-tools, .modal-actions, .modal-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.repo-files-card { aspect-ratio: auto; min-height: 0; max-height: 520px; overflow-x: hidden; overflow-y: auto; }
+.repo-files-card { aspect-ratio: auto; min-height: 0; max-height: 460px; overflow-x: hidden; overflow-y: auto; }
 .repo-panel-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 #repo-file-status { color: var(--dim); font-size: 10px; overflow-wrap: anywhere; }
 .repo-tree {
