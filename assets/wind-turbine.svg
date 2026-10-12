@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">Wind turbine</title>
-  <g fill="none" stroke="#00ff9f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <g fill="none" stroke="#57b6ef" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
     <path d="M32 30v27M23 57h18M27"/>
     <path d="M31 21 27 5h10l-4 16M28 27 12 34l6 9 13-12M36 27l16 7-6 9-13-12"/>
-    <circle cx="32" cy="25" r="4" fill="#163b2c"/>
+    <circle cx="32" cy="25" r="4" fill="#061522"/>
   </g>
 </svg>
