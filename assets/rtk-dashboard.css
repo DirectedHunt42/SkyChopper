@@ -102,7 +102,7 @@ body.update-open { overflow: hidden; }
     border-radius: 10px;
     overflow: auto;
 }
-.card { display: flex; flex-direction: column; aspect-ratio: 1; }
+.card { display: flex; flex-direction: column; width: 100%; max-width: 100%; aspect-ratio: 1; }
 .chart-card { grid-column: 1 / -1; aspect-ratio: auto; min-height: clamp(360px, 55vh, 560px); }
 .card h2 {
     display: flex;
@@ -203,6 +203,10 @@ body.update-open { overflow: hidden; }
 .repo-panel-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 #repo-file-status { color: var(--dim); font-size: 10px; overflow-wrap: anywhere; }
 .repo-tree {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex: 0 0 auto;
     min-height: 130px;
     margin: 0;
     padding: 10px;
@@ -214,6 +218,7 @@ body.update-open { overflow: hidden; }
     line-height: 1.5;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    overflow: visible;
 }
 .file-category { margin: 14px 0 6px; color: var(--blue-soft); font-size: 10px; }
 .repo-associations { display: grid; gap: 4px; }
