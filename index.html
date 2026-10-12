@@ -58,13 +58,26 @@
         gap: 8px;
         align-items: center;
     }
+
+    .document-content {
+        max-height: min(70vh, 720px);
+        overflow: auto;
+        margin: 0;
+        padding: 14px;
+        border-radius: 12px;
+        background: rgba(2, 6, 23, 0.55);
+        color: var(--ink, #fff);
+        font: 13px/1.6 "JetBrains Mono", Consolas, monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
 </style>
 </head>
 
 <body>
 <div class="page">
     <header class="hero">
-        <div class="eyebrow">Live telemetry</div>
+        <div class="eyebrow">Live telemetry <span id="app-version">v0.1.5</span></div>
         <div class="hero-row">
             <h1 id="dashboard-title">SkyChopper Wind Dashboard</h1>
             <div class="hero-actions">
@@ -79,6 +92,8 @@
                 </button>
                 <button class="settings-btn" id="open-settings" type="button">Settings</button>
                 <button class="settings-btn" id="open-logs" type="button">Logs</button>
+                <button class="settings-btn" id="open-readme" type="button">README</button>
+                <button class="settings-btn" id="open-license" type="button">License</button>
                 <button class="settings-btn update-btn" id="open-update" type="button">Update</button>
                 
                 <!-- Three-position power override switch -->
@@ -121,6 +136,19 @@
             </div>
             <div class="turbine-label" id="turbine-label" aria-hidden="true">SIMULATED</div>
             <canvas id="monitorCanvas" width="760" height="520"></canvas>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="document-backdrop" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="document-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-eyebrow">SkyChopper documents</div>
+                    <h2 id="document-title">README</h2>
+                </div>
+                <button class="icon-btn" id="close-document" type="button" aria-label="Close document viewer">Close</button>
+            </div>
+            <pre class="document-content" id="document-content" tabindex="0">Loading document…</pre>
         </div>
     </div>
 
@@ -177,7 +205,7 @@
                 <div>
                     <div class="modal-eyebrow">Configuration</div>
                     <h2 id="settings-title">Settings</h2>
-                    <div class="modal-note" id="settings-version">Version 0.1.4</div>
+                    <div class="modal-note" id="settings-version">Version 0.1.5</div>
                 </div>
                 <button class="icon-btn" id="close-settings" type="button" aria-label="Close settings">Close</button>
             </div>

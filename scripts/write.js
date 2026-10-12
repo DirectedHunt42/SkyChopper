@@ -30,11 +30,18 @@ const serialMonitorFeed = document.getElementById('serial-monitor-feed');
 const refreshLogBtn = document.getElementById('refresh-log');
 const refreshSerialBtn = document.getElementById('refresh-serial');
 const settingsVersion = document.getElementById('settings-version');
+const appVersionLabel = document.getElementById('app-version');
+const documentBackdrop = document.getElementById('document-backdrop');
+const documentTitle = document.getElementById('document-title');
+const documentContent = document.getElementById('document-content');
 const updateBackdrop = document.getElementById('update-backdrop');
 const updateStatus = document.getElementById('update-status');
 const updateOutput = document.getElementById('update-output');
 const startUpdateButton = document.getElementById('start-update');
 let updatePollTimer = null;
+let updateRunning = false;
+let updateAutoCloseTimer = null;
+let documentRequestId = 0;
 const networkBackdrop = document.getElementById('network-backdrop');
 const networkButton = document.getElementById('open-network-stats');
 let networkPollTimer = null;
@@ -63,7 +70,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "0.1.4";
+const APP_VERSION = "0.1.5";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -352,6 +359,7 @@ async function loadSettings() {
     if (settingsVersion) {
         settingsVersion.textContent = `Version ${APP_VERSION}`;
     }
+    if (appVersionLabel) appVersionLabel.textContent = `v${APP_VERSION}`;
 }
 
 function openSettingsModal() {
@@ -1227,12 +1235,40 @@ async function postAction(path) {
 }
 
 function closeUpdateModal() {
+    if (updateRunning) return;
     if (updateBackdrop) {
         updateBackdrop.classList.remove("open");
         updateBackdrop.setAttribute("aria-hidden", "true");
     }
     if (updatePollTimer) clearInterval(updatePollTimer);
     updatePollTimer = null;
+    if (updateAutoCloseTimer) clearTimeout(updateAutoCloseTimer);
+    updateAutoCloseTimer = null;
+}
+
+function closeDocumentModal() {
+    documentRequestId += 1;
+    documentBackdrop?.classList.remove("open");
+    documentBackdrop?.setAttribute("aria-hidden", "true");
+}
+
+async function openDocumentModal(fileName, title) {
+    if (!documentBackdrop || !documentTitle || !documentContent) return;
+    const requestId = ++documentRequestId;
+    documentTitle.textContent = title;
+    documentContent.textContent = "Loading document…";
+    documentBackdrop.classList.add("open");
+    documentBackdrop.setAttribute("aria-hidden", "false");
+    try {
+        const response = await fetch(fileName, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const contents = await response.text();
+        if (requestId === documentRequestId) documentContent.textContent = contents;
+    } catch (error) {
+        if (requestId === documentRequestId) {
+            documentContent.textContent = `Unable to load ${title}: ${error.message}`;
+        }
+    }
 }
 
 async function refreshUpdateStatus() {
@@ -1240,14 +1276,26 @@ async function refreshUpdateStatus() {
         const response = await fetch(`${API_BASE}/api/update`, { cache: "no-store" });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || "Unable to read update status");
+        const wasRunning = updateRunning;
+        updateRunning = data.status === "Starting SkyChopper update..." || data.status === "Updating SkyChopper...";
+        const closeUpdateButton = document.getElementById("close-update");
+        if (closeUpdateButton) closeUpdateButton.disabled = updateRunning;
         updateStatus.textContent = data.status;
         updateOutput.textContent = data.output || "No updater output yet.";
         updateOutput.scrollTop = updateOutput.scrollHeight;
         startUpdateButton.disabled = !data.done && data.status !== "Ready to update." && data.status !== "Update complete.";
         if (data.done) {
+            updateRunning = false;
+            if (closeUpdateButton) closeUpdateButton.disabled = false;
             startUpdateButton.disabled = false;
             if (updatePollTimer) clearInterval(updatePollTimer);
             updatePollTimer = null;
+            if (wasRunning && !updateAutoCloseTimer) {
+                updateAutoCloseTimer = setTimeout(() => {
+                    updateAutoCloseTimer = null;
+                    closeUpdateModal();
+                }, 5000);
+            }
         }
     } catch (error) {
         updateStatus.textContent = "Waiting for SkyChopper to reconnect...";
@@ -1341,14 +1389,25 @@ setInterval(refreshNetworkStats, 15000);
 document.getElementById("open-update")?.addEventListener("click", () => {
     updateBackdrop.classList.add("open");
     updateBackdrop.setAttribute("aria-hidden", "false");
+    if (updateAutoCloseTimer) clearTimeout(updateAutoCloseTimer);
+    updateAutoCloseTimer = null;
     refreshUpdateStatus();
     if (!updatePollTimer) updatePollTimer = setInterval(refreshUpdateStatus, 2000);
+});
+document.getElementById("open-readme")?.addEventListener("click", () => openDocumentModal("README.md", "README"));
+document.getElementById("open-license")?.addEventListener("click", () => openDocumentModal("LICENSE.txt", "License"));
+document.getElementById("close-document")?.addEventListener("click", closeDocumentModal);
+documentBackdrop?.addEventListener("click", (event) => {
+    if (event.target === documentBackdrop) closeDocumentModal();
 });
 document.getElementById("close-update")?.addEventListener("click", closeUpdateModal);
 updateBackdrop?.addEventListener("click", (event) => { if (event.target === updateBackdrop) closeUpdateModal(); });
 startUpdateButton?.addEventListener("click", async () => {
     if (!window.confirm("Update SkyChopper now? This discards tracked local changes, pulls the latest repository version, and reruns setup.")) return;
     startUpdateButton.disabled = true;
+    updateRunning = true;
+    const closeUpdateButton = document.getElementById("close-update");
+    if (closeUpdateButton) closeUpdateButton.disabled = true;
     updateStatus.textContent = "Starting SkyChopper update...";
     updateOutput.textContent = "";
     try {
@@ -1358,6 +1417,8 @@ startUpdateButton?.addEventListener("click", async () => {
         if (!updatePollTimer) updatePollTimer = setInterval(refreshUpdateStatus, 2000);
         refreshUpdateStatus();
     } catch (error) {
+        updateRunning = false;
+        if (closeUpdateButton) closeUpdateButton.disabled = false;
         updateStatus.textContent = `Update failed to start: ${error.message}`;
         startUpdateButton.disabled = false;
     }
@@ -1460,6 +1521,9 @@ window.addEventListener("resize", () => {
 
 window.addEventListener("keydown", (event) => {
     const key = event.key.toLowerCase();
+    if (key === "escape" && documentBackdrop?.classList.contains("open")) {
+        closeDocumentModal();
+    }
     if (key === "f5" || ((event.ctrlKey || event.metaKey) && key === "r")) {
         event.preventDefault();
     }

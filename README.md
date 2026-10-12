@@ -6,6 +6,8 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
+**Version: 0.1.5**
+
 ## Overview
 
 SkyChopper combines a canvas-driven dashboard with a backend service for a
