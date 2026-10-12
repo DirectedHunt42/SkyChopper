@@ -63,7 +63,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "0.1.3";
+const APP_VERSION = "0.1.4";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1142,6 +1142,21 @@ if (refreshSerialBtn) refreshSerialBtn.addEventListener("click", () => {
 });
 if (closeSettings) closeSettings.addEventListener("click", closeSettingsModal);
 if (settingsBackdrop) settingsBackdrop.addEventListener("click", (e) => { if (e.target === settingsBackdrop) closeSettingsModal(); });
+
+if (inputSimFallback) {
+    inputSimFallback.addEventListener("change", () => {
+        if (inputSimFallback.checked && inputSourceVoltageOnly) {
+            inputSourceVoltageOnly.checked = false;
+        }
+    });
+}
+if (inputSourceVoltageOnly) {
+    inputSourceVoltageOnly.addEventListener("change", () => {
+        if (inputSourceVoltageOnly.checked && inputSimFallback) {
+            inputSimFallback.checked = false;
+        }
+    });
+}
 
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener("click", () => {
