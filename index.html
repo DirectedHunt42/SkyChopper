@@ -7,10 +7,7 @@
 <title>SkyChopper Wind Dashboard</title>
 
 <!-- Favicon -->
-<link rel="icon" type="image/x-icon" href="assets/favicon.ico">
-
-<!-- Load dark/light CSS -->
-<link id="theme-css" rel="stylesheet" href="assets/dark.css">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 
 <!-- THREE-POSITION OVERRIDE SWITCH STYLES -->
 <style>
@@ -106,16 +103,18 @@
         color: var(--muted, #94a3b8);
     }
 </style>
+<link id="theme-css" rel="stylesheet" href="assets/rtk-dashboard.css">
 </head>
 
 <body>
 <div class="page">
     <header class="hero">
-        <div class="eyebrow">Live telemetry <span id="app-version">v1.1.6</span></div>
+        <div class="eyebrow">Power system monitor <span id="app-version">v1.2.0</span></div>
         <div class="hero-row">
-            <h1 id="dashboard-title">SkyChopper Wind Dashboard</h1>
+            <h1 id="dashboard-title">SKYCHOPPER // WIND POWER</h1>
             <div class="hero-actions">
                 <button class="settings-btn wifi-button signal-none" id="open-network-stats" type="button" aria-label="Network status unavailable" title="Network status unavailable">
+                    <img src="assets/icons/ethernet.svg" alt="" aria-hidden="true">
                     <svg class="wifi-status-icon" viewBox="0 0 36 30" aria-hidden="true">
                         <path class="wifi-segment" d="M2 9 Q18 -3 34 9" />
                         <path class="wifi-segment" d="M7 15 Q18 7 29 15" />
@@ -124,13 +123,40 @@
                     </svg>
                     <span id="wifi-button-label">Wi-Fi —</span>
                 </button>
-                <button class="settings-btn" id="open-settings" type="button">Settings</button>
-                <button class="settings-btn" id="open-logs" type="button">Logs</button>
-                <button class="settings-btn" id="open-readme" type="button">README</button>
-                <button class="settings-btn" id="open-license" type="button">License</button>
-                <button class="settings-btn update-btn" id="open-update" type="button">Update</button>
+                <button class="settings-btn" id="open-settings" type="button"><img src="assets/icons/files-config.svg" alt="" aria-hidden="true">Settings</button>
+                <button class="settings-btn" id="open-logs" type="button"><img src="assets/icons/download.svg" alt="" aria-hidden="true">Logs</button>
+                <button class="settings-btn" id="open-readme" type="button"><img src="assets/icons/readme.svg" alt="" aria-hidden="true">README</button>
+                <button class="settings-btn" id="open-license" type="button"><img src="assets/icons/license.svg" alt="" aria-hidden="true">License</button>
+                <button class="settings-btn update-btn" id="open-update" type="button"><img src="assets/icons/update.svg" alt="" aria-hidden="true">Update</button>
                 
-                <!-- Three-position power override switch -->
+            </div>
+        </div>
+    </header>
+    <main class="dashboard-grid">
+        <section class="card telemetry-card">
+            <h2>Live voltage <span class="status-pill info" id="telemetry-mode-label">Source only</span></h2>
+            <div class="voltage-grid">
+                <div class="voltage-tile source">
+                    <span class="label">Source</span>
+                    <strong id="source-voltage">--.-- V</strong>
+                    <small id="source-range">Expected 8.5–9.5 V</small>
+                </div>
+                <div class="voltage-tile full-telemetry">
+                    <span class="label">Battery</span><strong id="battery-voltage">--.-- V</strong>
+                    <small id="battery-range">Pack voltage</small>
+                </div>
+                <div class="voltage-tile full-telemetry">
+                    <span class="label">Buck output</span><strong id="buck-voltage">--.-- V</strong>
+                    <small id="buck-range">Target 9.0 V</small>
+                </div>
+            </div>
+            <div class="telemetry-bottom">
+                <div class="status-row">
+                    <div class="status-item"><span class="status-dot" id="status-source"></span><span>Source</span></div>
+                    <div class="status-item full-telemetry"><span class="status-dot" id="status-buck"></span><span>Buck</span></div>
+                    <div class="status-item full-telemetry"><span class="status-dot" id="status-battery"></span><span>Battery</span></div>
+                    <div class="status-item"><span class="status-dot" id="status-arduino"></span><span>Arduino</span></div>
+                </div>
                 <div class="override-group">
                     <div class="three-switch" id="override-switch">
                         <div class="slider-pill"></div>
@@ -140,38 +166,78 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </header>
-    <div class="panel">
-        <div class="status-row">
-            <div class="status-item">
-                <span class="status-dot" id="status-source"></span>
-                <span class="status-label">Source</span>
+            <div class="card-footer">Last telemetry: <span id="telemetry-time">Waiting for reader…</span></div>
+        </section>
+
+        <section class="card system-card">
+            <h2>System</h2>
+            <div class="metric"><span>Hostname</span><span id="system-hostname">--</span></div>
+            <div class="metric"><span>Uptime</span><span id="system-uptime">--</span></div>
+            <div class="metric"><span>Temperature</span><span id="system-temp">--</span></div>
+            <div class="metric"><span>Platform</span><span id="system-platform">--</span></div>
+            <div class="metric"><span>Dashboard</span><span>v1.2.0</span></div>
+        </section>
+
+        <section class="card resources-card">
+            <h2>System resources</h2>
+            <div class="metric"><span>CPU load</span><span id="cpu-label">--</span></div>
+            <div class="metric"><span>Memory</span><span id="memory-label">--</span></div>
+            <div class="bar"><div class="bar-fill" id="memory-bar"></div></div>
+            <div class="metric"><span>Root storage</span><span id="disk-label">--</span></div>
+            <div class="bar"><div class="bar-fill" id="disk-bar"></div></div>
+            <div class="metric"><span>Load average</span><span id="load-label">--</span></div>
+        </section>
+
+        <section class="card network-card">
+            <h2>Network</h2>
+            <div class="metric"><span>Wi-Fi</span><span id="dash-network-ssid">--</span></div>
+            <div class="wifi-signal-display">
+                <svg class="wifi-icon" viewBox="0 0 36 30" aria-hidden="true">
+                    <path class="wifi-segment" d="M2 9 Q18 -3 34 9"/><path class="wifi-segment" d="M7 15 Q18 7 29 15"/><path class="wifi-segment" d="M12 21 Q18 16 24 21"/><circle class="wifi-segment" cx="18" cy="27" r="1.8"/>
+                </svg>
+                <span id="dash-network-signal">--</span>
             </div>
-            <div class="status-item">
-                <span class="status-dot" id="status-buck"></span>
-                <span class="status-label">Buck</span>
+            <div class="metric"><span>Primary IP</span><span id="dash-network-ip">--</span></div>
+            <div class="metric"><span>Default route</span><span id="dash-network-route">--</span></div>
+            <div class="metric"><span>Traffic since boot</span><span id="dash-network-traffic">--</span></div>
+        </section>
+
+        <section class="card device-card">
+            <h2>Arduino / serial</h2>
+            <div class="metric"><span>Configured port</span><span id="serial-port">--</span></div>
+            <div class="metric"><span>Baud rate</span><span id="serial-baud">--</span></div>
+            <div class="metric"><span>Link state</span><span id="serial-connection">Checking…</span></div>
+            <div class="metric"><span>UART devices</span><span id="serial-device-list">--</span></div>
+            <div class="card-footer">Pi UART and Arduino must use matching baud rates and crossed TX/RX wiring.</div>
+        </section>
+
+        <section class="card chart-card">
+            <h2>Voltage history <span class="card-tools"><button class="settings-btn" id="refresh-log" type="button">Refresh</button></span></h2>
+            <div class="chart-legend">
+                <span class="legend-item"><span class="legend-swatch"></span>Source</span>
+                <span class="legend-item full-telemetry"><span class="legend-swatch batt"></span>Battery</span>
+                <span class="legend-item full-telemetry"><span class="legend-swatch buck"></span>Buck</span>
+                <span id="log-lines-count">Loading log…</span>
             </div>
-            <div class="status-item">
-                <span class="status-dot" id="status-battery"></span>
-                <span class="status-label">Battery</span>
+            <div class="chart-wrap"><canvas id="logChart" width="900" height="240" aria-label="Voltage history chart"></canvas></div>
+        </section>
+
+        <section class="card reader-card">
+            <h2>Reader output <span id="reader-state" class="status-pill info">Live</span></h2>
+            <pre id="reader-log" class="reader-output">Waiting for read.js output…</pre>
+            <div class="card-footer">Recent messages from the telemetry reader process.</div>
+        </section>
+
+        <section class="card logs-card">
+            <h2>Recent telemetry log <span class="card-tools"><button class="settings-btn" id="open-logs-card" type="button"><img src="assets/icons/download.svg" alt="" aria-hidden="true">View / download</button></span></h2>
+            <div class="log-table-wrap">
+                <table class="log-table">
+                    <thead><tr id="recent-log-head"><th>Time (ISO)</th><th>Source (V)</th></tr></thead>
+                    <tbody id="recent-log-body"><tr><td colspan="2">Loading…</td></tr></tbody>
+                </table>
             </div>
-            <div class="status-item">
-                <span class="status-dot" id="status-arduino"></span>
-                <span class="status-label">Arduino</span>
-            </div>
-        </div>
-        <div class="canvas-wrap">
-            <div class="turbine" id="turbine" aria-hidden="true">
-                <div class="turbine-hub"></div>
-                <div class="blade blade-1"></div>
-                <div class="blade blade-2"></div>
-                <div class="blade blade-3"></div>
-            </div>
-            <div class="turbine-label" id="turbine-label" aria-hidden="true">SIMULATED</div>
-            <canvas id="monitorCanvas" width="760" height="520"></canvas>
-        </div>
-    </div>
+        </section>
+    </main>
 
     <div class="modal-backdrop" id="document-backdrop" aria-hidden="true">
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="document-title">
@@ -239,7 +305,7 @@
                 <div>
                     <div class="modal-eyebrow">Configuration</div>
                     <h2 id="settings-title">Settings</h2>
-                    <div class="modal-note" id="settings-version">Version 1.1.6</div>
+                    <div class="modal-note" id="settings-version">Version 1.2.0</div>
                 </div>
                 <button class="icon-btn" id="close-settings" type="button" aria-label="Close settings">Close</button>
             </div>
@@ -288,23 +354,11 @@
                     <h2 id="logs-title">Log Controls</h2>
                 </div>
                 <div class="modal-header-actions">
-                    <button class="ghost-btn" id="refresh-log" type="button">Refresh</button>
+                    <button class="ghost-btn" id="refresh-log-modal" type="button">Refresh</button>
                     <button class="icon-btn" id="close-logs" type="button" aria-label="Close logs">Close</button>
                 </div>
             </div>
             <div class="modal-note">Download or clear the long-term CSV log stored on the Pi.</div>
-            <div class="log-chart">
-                <div class="log-chart-header">
-                    <div class="log-chart-title">Voltage Trend</div>
-                    <div class="log-legend">
-                        <span class="legend-item"><span class="legend-swatch legend-batt"></span>Battery</span>
-                        <span class="legend-item"><span class="legend-swatch legend-source"></span>Source</span>
-                        <span class="legend-item"><span class="legend-swatch legend-buck"></span>Buck</span>
-                    </div>
-                </div>
-                <canvas id="logChart" width="640" height="180"></canvas>
-            </div>
-            <div id="log-lines-count" class="modal-note">0 / 1 000 000 log lines used</div>
             <div class="log-table-wrap" id="log-table-wrap">
                 <table class="log-table" id="log-table">
                     <thead>

@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/favicon.ico" alt="SkyChopper" width="72" height="72">
+  <img src="assets/favicon.svg" alt="SkyChopper" width="72" height="72">
 </p>
 
 <h1 align="center">SkyChopper</h1>
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.1.6**
+**Version: 1.2.0**
 
 ## Overview
 

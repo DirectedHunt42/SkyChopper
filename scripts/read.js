@@ -4,6 +4,18 @@ const http = require("http");
 const os = require("os");
 const { execFile } = require("child_process");
 
+const READER_LOG_MAX_ENTRIES = 300;
+const readerLogEntries = [];
+for (const level of ["log", "warn", "error"]) {
+    const original = console[level].bind(console);
+    console[level] = (...args) => {
+        const message = args.map((value) => typeof value === "string" ? value : String(value instanceof Error ? value.stack || value.message : JSON.stringify(value))).join(" ");
+        readerLogEntries.push({ time_iso: new Date().toISOString(), message: level === "log" ? message : `[${level.toUpperCase()}] ${message}` });
+        if (readerLogEntries.length > READER_LOG_MAX_ENTRIES) readerLogEntries.shift();
+        original(...args);
+    };
+}
+
 const statusFile = path.join(__dirname, "../data/status.json");
 const settingsFile = path.join(__dirname, "../data/settings.json");
 const logFile = path.join(__dirname, "../data/log.csv");
@@ -126,6 +138,70 @@ async function getNetworkStats() {
         networkTraffic,
         interfaces,
         wifi
+    };
+}
+
+async function getSystemStats() {
+    let temperatureC = null;
+    if (process.platform === "linux") {
+        try {
+            const rawTemperature = Number(fs.readFileSync("/sys/class/thermal/thermal_zone0/temp", "utf8").trim());
+            if (Number.isFinite(rawTemperature)) temperatureC = rawTemperature > 1000 ? rawTemperature / 1000 : rawTemperature;
+        } catch {}
+    }
+
+    let disk = { totalBytes: null, usedBytes: null, usedPercent: null };
+    if (process.platform === "linux") {
+        const diskOutput = await runNetworkCommand("df", ["-Pk", "/"]);
+        const diskLine = diskOutput.split(/\r?\n/).slice(1).find((line) => line.trim());
+        if (diskLine) {
+            const fields = diskLine.trim().split(/\s+/);
+            const totalKb = Number(fields[1]);
+            const usedKb = Number(fields[2]);
+            const usedPercent = Number.parseFloat(fields[4]);
+            if (Number.isFinite(totalKb) && Number.isFinite(usedKb)) {
+                disk = { totalBytes: totalKb * 1024, usedBytes: usedKb * 1024, usedPercent: Number.isFinite(usedPercent) ? usedPercent : null };
+            }
+        }
+    }
+
+    const totalMemory = os.totalmem();
+    const freeMemory = os.freemem();
+    return {
+        hostname: os.hostname(),
+        uptimeSeconds: Math.floor(os.uptime()),
+        platform: `${os.type()} ${os.release()} (${os.arch()})`,
+        cpuCount: os.cpus().length,
+        loadAverage: os.loadavg().map((value) => Number(value.toFixed(2))),
+        temperatureC: Number.isFinite(temperatureC) ? Number(temperatureC.toFixed(1)) : null,
+        memory: {
+            totalBytes: totalMemory,
+            usedBytes: Math.max(0, totalMemory - freeMemory),
+            usedPercent: totalMemory > 0 ? Math.round(((totalMemory - freeMemory) / totalMemory) * 100) : 0
+        },
+        disk
+    };
+}
+
+function getDeviceStats() {
+    let serialDevices = [];
+    if (process.platform === "linux") {
+        try {
+            serialDevices = fs.readdirSync("/dev")
+                .filter((name) => /^(tty(ACM|USB|S|AMA)\d+|serial0)$/.test(name))
+                .map((name) => {
+                    const devicePath = path.join("/dev", name);
+                    let resolvedPath = devicePath;
+                    try { resolvedPath = fs.realpathSync(devicePath); } catch {}
+                    return { path: devicePath, resolvedPath };
+                });
+        } catch {}
+    }
+    return {
+        configuredPort: SERIAL_PORT || "Not configured",
+        baudRate: SERIAL_BAUD,
+        connected: Boolean(serialPortInstance && serialPortInstance.isOpen),
+        serialDevices
     };
 }
 
@@ -816,6 +892,31 @@ if (ENABLE_API_SERVER) {
                 res.writeHead(500, { "Content-Type": "application/json" });
                 res.end(JSON.stringify({ ok: false, error: error.message }));
             });
+            return;
+        }
+
+        if (pathname === "/api/system" && req.method === "GET") {
+            getSystemStats().then((stats) => {
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: true, ...stats }));
+            }).catch((error) => {
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: false, error: error.message }));
+            });
+            return;
+        }
+
+        if (pathname === "/api/devices" && req.method === "GET") {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, ...getDeviceStats() }));
+            return;
+        }
+
+        if (pathname === "/api/reader-log" && req.method === "GET") {
+            const limit = Number.parseInt(requestUrl.searchParams.get("limit") || "80", 10);
+            const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(200, limit) : 80;
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, entries: readerLogEntries.slice(-safeLimit) }));
             return;
         }
 

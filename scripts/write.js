@@ -1,5 +1,5 @@
 const canvas = document.getElementById('monitorCanvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas ? canvas.getContext('2d') : null;
 const turbine = document.getElementById('turbine');
 const dashboardTitle = document.getElementById('dashboard-title');
 const statusSource = document.getElementById('status-source');
@@ -28,6 +28,9 @@ const serialMonitorPanel = document.getElementById('serial-monitor-panel');
 const toggleSerialMonitorBtn = document.getElementById('toggle-serial-monitor');
 const serialMonitorFeed = document.getElementById('serial-monitor-feed');
 const refreshLogBtn = document.getElementById('refresh-log');
+const refreshLogModalBtn = document.getElementById('refresh-log-modal');
+const recentLogBody = document.getElementById('recent-log-body');
+const readerLog = document.getElementById('reader-log');
 const refreshSerialBtn = document.getElementById('refresh-serial');
 const settingsVersion = document.getElementById('settings-version');
 const appVersionLabel = document.getElementById('app-version');
@@ -70,7 +73,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.1.6";
+const APP_VERSION = "1.2.0";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -85,12 +88,12 @@ const confirmSimOk = document.getElementById('confirm-sim-ok');
 const titleModes = {
     1: {
         productName: "SkyChopper",
-        dashboardName: "SkyChopper Wind Dashboard",
+        dashboardName: "SKYCHOPPER // WIND POWER",
         isVerticalAxis: false
     },
     2: {
         productName: "SkySlicer",
-        dashboardName: "SkySlicer Wind Dashboard",
+        dashboardName: "SKYSLICER // WIND POWER",
         isVerticalAxis: true
     }
 };
@@ -227,6 +230,7 @@ function roundRect(x, y, w, h, r) {
 }
 
 function resizeCanvas() {
+    if (!canvas || !ctx) return;
     const rect = canvas.getBoundingClientRect();
     dpr = window.devicePixelRatio || 1;
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
@@ -241,7 +245,7 @@ function resizeLogChart() {
     logChart.width = Math.max(1, Math.floor(rect.width * scale));
     logChart.height = Math.max(1, Math.floor(rect.height * scale));
     logChartCtx.setTransform(scale, 0, 0, scale, 0, 0);
-    if (logRowsCache.length && logsBackdrop?.classList.contains("open")) {
+    if (logRowsCache.length) {
         renderLogChart(logRowsCache);
     }
 }
@@ -379,7 +383,7 @@ function openLogsModal() {
     logsBackdrop.classList.add("open");
     logsBackdrop.setAttribute("aria-hidden", "false");
     loadLogTable();
-    logAutoRefreshTimer = setInterval(loadLogTable, LOG_REFRESH_MS);
+    if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(loadLogTable, LOG_REFRESH_MS);
 }
 
 function closeLogsModal() {
@@ -593,6 +597,29 @@ function renderLogTable(rows, header = []) {
         fragment.appendChild(tr);
     });
     logTableBody.appendChild(fragment);
+    if (recentLogBody) {
+        const recentHead = document.getElementById("recent-log-head");
+        const recentSourceOnly = document.body.classList.contains("source-only-mode");
+        if (recentHead) {
+            recentHead.innerHTML = "";
+            (recentSourceOnly ? ["Time (ISO)", "Source (V)"] : ["Time (ISO)", "Battery (V)", "Source (V)", "Buck (V)", "Relay mode"]).forEach((label) => {
+                const th = document.createElement("th"); th.textContent = label; recentHead.appendChild(th);
+            });
+        }
+        recentLogBody.innerHTML = "";
+        const previewRows = rows.slice(-8).reverse();
+        previewRows.forEach((row) => {
+            const tr = document.createElement("tr");
+            const values = recentSourceOnly
+                ? [getLogCell(row, headerMap, "time_iso", 0), getLogCell(row, headerMap, "source_voltage", 2)]
+                : [getLogCell(row, headerMap, "time_iso", 0), getLogCell(row, headerMap, "batt_voltage", 1), getLogCell(row, headerMap, "source_voltage", 2), getLogCell(row, headerMap, "buck_voltage", 3), getLogCell(row, headerMap, "relay_mode", 4)];
+            values.forEach((value) => {
+                const td = document.createElement("td"); td.textContent = value; tr.appendChild(td);
+            });
+            recentLogBody.appendChild(tr);
+        });
+        if (!previewRows.length) recentLogBody.innerHTML = `<tr><td colspan="${recentSourceOnly ? 2 : 5}">No log data yet.</td></tr>`;
+    }
 }
 
 function renderLogChart(rows) {
@@ -824,6 +851,20 @@ async function updateData() {
         targetStatus = normalizeStatus(d);
         availableKeys = new Set(Object.keys(d || {}));
         document.body.classList.toggle("source-only-mode", settingsState.source_voltage_only || d.telemetry_mode === "source_only");
+        const displayMetric = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)} V` : "--.-- V"; };
+        displayMetric("source-voltage", d.source_voltage);
+        displayMetric("battery-voltage", d.batt_voltage);
+        displayMetric("buck-voltage", d.buck_voltage);
+        const sourceRange = document.getElementById("source-range");
+        if (sourceRange) {
+            const min = Number.isFinite(d.source_expected_min_v) ? d.source_expected_min_v : thresholds.sourceExpectedMinV;
+            const max = Number.isFinite(d.source_expected_max_v) ? d.source_expected_max_v : thresholds.sourceExpectedMaxV;
+            sourceRange.textContent = `Expected ${min.toFixed(1)}–${max.toFixed(1)} V`;
+        }
+        const modeLabel = document.getElementById("telemetry-mode-label");
+        if (modeLabel) modeLabel.textContent = (settingsState.source_voltage_only || d.telemetry_mode === "source_only") ? "Source only" : "Full telemetry";
+        const telemetryTime = document.getElementById("telemetry-time");
+        if (telemetryTime) telemetryTime.textContent = d.time ? new Date(d.time).toLocaleString() : "Waiting for reader";
 
         if (statusSource) {
             const srcV = Number.isFinite(d.source_voltage) ? d.source_voltage : status.source_voltage;
@@ -902,6 +943,7 @@ async function updateData() {
 }
 
 function draw() {
+    if (!canvas || !ctx) return;
     const width = canvas.width / dpr;
     const height = canvas.height / dpr;
 
@@ -1119,6 +1161,7 @@ if (openLogs) {
         loadLogTable();
     });
 }
+document.getElementById("open-logs-card")?.addEventListener("click", openLogsModal);
 if (closeLogs) closeLogs.addEventListener("click", closeLogsModal);
 if (logsBackdrop) logsBackdrop.addEventListener("click", (e) => { if (e.target === logsBackdrop) closeLogsModal(); });
 if (toggleSerialMonitorBtn) {
@@ -1145,6 +1188,7 @@ if (downloadLog) {
 if (refreshLogBtn) refreshLogBtn.addEventListener("click", () => {
     loadLogTable();
 });
+if (refreshLogModalBtn) refreshLogModalBtn.addEventListener("click", loadLogTable);
 if (refreshSerialBtn) refreshSerialBtn.addEventListener("click", () => {
     loadSerialMonitor(true);
 });
@@ -1537,6 +1581,11 @@ async function refreshNetworkStats() {
         setNetworkText("network-default-interface", data.defaultInterface);
         setNetworkText("network-default-gateway", data.defaultGateway);
         setNetworkText("network-traffic", data.networkTraffic);
+        setNetworkText("dash-network-ssid", connected ? (wifi.ssid || "Connected") : "Not connected");
+        setNetworkText("dash-network-signal", connected && quality > 0 ? `${Math.round(quality)}% · ${wifi.signal}` : wifi.state || "Unavailable");
+        setNetworkText("dash-network-ip", data.primaryIp);
+        setNetworkText("dash-network-route", `${data.defaultInterface || "Unavailable"} · ${data.defaultGateway || "Unavailable"}`);
+        setNetworkText("dash-network-traffic", data.networkTraffic);
         const activeInterfaces = (data.interfaces || []).map((item) => {
             const primary = item.name === data.defaultInterface ? " (default)" : "";
             return `${item.name}: ${item.addresses.join(", ")}${primary}`;
@@ -1573,7 +1622,7 @@ networkButton?.addEventListener("click", () => {
 document.getElementById("close-network")?.addEventListener("click", closeNetworkModal);
 networkBackdrop?.addEventListener("click", (event) => { if (event.target === networkBackdrop) closeNetworkModal(); });
 refreshNetworkStats();
-setInterval(refreshNetworkStats, 15000);
+setInterval(refreshNetworkStats, 10000);
 
 document.getElementById("open-update")?.addEventListener("click", () => {
     updateBackdrop.classList.add("open");
@@ -1691,6 +1740,69 @@ if (overrideSwitch) {
     });
 }
 
+function formatBytes(value) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return "Unavailable";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let amount = Number(value), index = 0;
+    while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index++; }
+    return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+function formatUptime(seconds) {
+    if (!Number.isFinite(Number(seconds))) return "Unavailable";
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${days}d ${hours}h ${minutes}m`;
+}
+
+async function refreshSystemStats() {
+    try {
+        const response = await fetch(`${API_BASE}/api/system`, { cache: "no-store" });
+        if (!response.ok) throw new Error("System stats unavailable");
+        const data = await response.json();
+        const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value ?? "Unavailable"; };
+        const bar = (id, percent) => { const el = document.getElementById(id); if (el) el.style.width = `${Math.max(0, Math.min(100, Number(percent) || 0))}%`; };
+        set("system-hostname", data.hostname);
+        set("system-uptime", formatUptime(data.uptimeSeconds));
+        set("system-temp", Number.isFinite(data.temperatureC) ? `${data.temperatureC.toFixed(1)} °C` : "Unavailable");
+        set("system-platform", data.platform);
+        const cpu = Array.isArray(data.loadAverage) ? data.loadAverage[0] : null;
+        set("cpu-label", Number.isFinite(cpu) ? `${cpu.toFixed(2)} / ${data.cpuCount} cores` : "Unavailable");
+        set("memory-label", `${formatBytes(data.memory?.usedBytes)} / ${formatBytes(data.memory?.totalBytes)} (${data.memory?.usedPercent ?? "--"}%)`);
+        bar("memory-bar", data.memory?.usedPercent);
+        set("disk-label", `${formatBytes(data.disk?.usedBytes)} / ${formatBytes(data.disk?.totalBytes)} (${data.disk?.usedPercent ?? "--"}%)`);
+        bar("disk-bar", data.disk?.usedPercent);
+        set("load-label", Array.isArray(data.loadAverage) ? data.loadAverage.join(" / ") : "Unavailable");
+    } catch {}
+}
+
+async function refreshDeviceStats() {
+    try {
+        const response = await fetch(`${API_BASE}/api/devices`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Device stats unavailable");
+        const data = await response.json();
+        const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value ?? "Unavailable"; };
+        set("serial-port", data.configuredPort);
+        set("serial-baud", data.baudRate);
+        set("serial-connection", data.connected ? "Connected" : "Disconnected");
+        set("serial-device-list", (data.serialDevices || []).map((device) => device.path === device.resolvedPath ? device.path : `${device.path} → ${device.resolvedPath}`).join(", ") || "No UART device found");
+        const state = document.getElementById("reader-state");
+        if (state) { state.textContent = data.connected ? "Serial connected" : "Waiting for serial"; state.className = `status-pill ${data.connected ? "ok" : "warn"}`; }
+    } catch {}
+}
+
+async function refreshReaderLog() {
+    if (!readerLog) return;
+    try {
+        const response = await fetch(`${API_BASE}/api/reader-log?limit=80`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Reader output unavailable");
+        const data = await response.json();
+        readerLog.textContent = (data.entries || []).map((entry) => `${entry.time_iso}  ${entry.message}`).join("\n") || "Waiting for read.js output";
+        readerLog.scrollTop = readerLog.scrollHeight;
+    } catch { readerLog.textContent = "Reader output unavailable"; }
+}
+
 function startPolling() {
     updateData();
     setInterval(updateData, 1000);
@@ -1698,6 +1810,14 @@ function startPolling() {
 
 startPolling();
 loadSettings();
+refreshSystemStats();
+refreshDeviceStats();
+refreshReaderLog();
+loadLogTable();
+setInterval(refreshSystemStats, 5000);
+setInterval(refreshDeviceStats, 3000);
+setInterval(refreshReaderLog, 2000);
+setInterval(loadLogTable, LOG_REFRESH_MS);
 resizeCanvas();
 resizeLogChart();
 renderLoop();
