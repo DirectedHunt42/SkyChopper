@@ -112,6 +112,7 @@ All endpoints are served from `http://localhost:8000` by default.
 - `POST /api/settings`: Persist settings JSON. Body is merged over defaults.
 - `POST /api/reset-all`: Delete all data files and recreate defaults.
 - `POST /api/clear-logs`: Truncate `data/log.csv` to just the header.
+- `GET /api/network`: Read hostname, active IPv4 interfaces, default route, and Wi-Fi connection details.
 - `GET /api/update` and `POST /api/update`: Read update progress and start the installed updater.
 
 ## Update from the dashboard
@@ -136,6 +137,7 @@ the updater status and recent output.
 - `assets/light.css`: Light theme styling.
 - `scripts/write.js`: Front-end rendering, settings, and UI logic.
 - `scripts/read.js`: Telemetry reader, simulator fallback, API server.
+- Network status uses the Linux `iw` utility for Wi-Fi signal and link details.
 - `data/settings.json`: User-configurable thresholds.
 - `data/status.json`: Live status payload consumed by the UI.
 - `data/log.csv`: Rolling telemetry log.

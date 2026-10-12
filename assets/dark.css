@@ -145,6 +145,44 @@ h1 {
     border-color: #334155;
 }
 
+.wifi-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    color: #94a3b8;
+}
+
+.wifi-status-icon {
+    width: 22px;
+    height: 20px;
+    overflow: visible;
+}
+
+.wifi-status-icon .wifi-segment {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 3;
+    stroke-linecap: round;
+    opacity: 0.25;
+}
+
+.wifi-status-icon circle.wifi-segment {
+    fill: currentColor;
+    stroke: none;
+}
+
+.wifi-status-icon .wifi-segment.active {
+    opacity: 1;
+}
+
+.wifi-button.signal-weak { color: #f87171; }
+.wifi-button.signal-fair { color: #fbbf24; }
+.wifi-button.signal-good { color: #d9e650; }
+.wifi-button.signal-strong { color: #34d399; }
+.wifi-button.signal-none { color: #94a3b8; }
+
 .update-btn {
     color: #86efac;
 }
@@ -162,6 +200,51 @@ h1 {
     font: 12px/1.5 "JetBrains Mono", monospace;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+.modal.network-modal {
+    width: min(700px, 94vw);
+    max-height: min(86vh, 760px);
+    overflow-y: auto;
+}
+
+.network-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.network-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    background: rgba(7, 11, 20, 0.7);
+}
+
+.network-stat span {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.network-stat strong {
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+
+.network-stat-wide {
+    grid-column: 1 / -1;
+}
+
+.network-stat-wide strong {
+    white-space: pre-line;
 }
 
 .telemetry-mode-note {
@@ -732,6 +815,14 @@ canvas {
 
     .checkbox-field {
         grid-column: span 1;
+    }
+
+    .network-stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .network-stat-wide {
+        grid-column: auto;
     }
 
     .turbine {

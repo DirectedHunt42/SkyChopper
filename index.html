@@ -68,6 +68,15 @@
         <div class="hero-row">
             <h1 id="dashboard-title">SkyChopper Wind Dashboard</h1>
             <div class="hero-actions">
+                <button class="settings-btn wifi-button signal-none" id="open-network-stats" type="button" aria-label="Network status unavailable" title="Network status unavailable">
+                    <svg class="wifi-status-icon" viewBox="0 0 36 30" aria-hidden="true">
+                        <path class="wifi-segment" d="M2 9 Q18 -3 34 9" />
+                        <path class="wifi-segment" d="M7 15 Q18 7 29 15" />
+                        <path class="wifi-segment" d="M12 21 Q18 16 24 21" />
+                        <circle class="wifi-segment" cx="18" cy="27" r="1.8" />
+                    </svg>
+                    <span id="wifi-button-label">Wi-Fi —</span>
+                </button>
                 <button class="settings-btn" id="open-settings" type="button">Settings</button>
                 <button class="settings-btn" id="open-logs" type="button">Logs</button>
                 <button class="settings-btn update-btn" id="open-update" type="button">Update</button>
@@ -133,6 +142,34 @@
         </div>
     </div>
 
+    <div class="modal-backdrop" id="network-backdrop" aria-hidden="true">
+        <div class="modal network-modal" role="dialog" aria-modal="true" aria-labelledby="network-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-eyebrow">System</div>
+                    <h2 id="network-title">Network status</h2>
+                </div>
+                <button class="icon-btn" id="close-network" type="button" aria-label="Close network status">Close</button>
+            </div>
+            <div class="network-stats-grid">
+                <div class="network-stat"><span>Wi-Fi</span><strong id="network-wifi-state">Loading…</strong></div>
+                <div class="network-stat"><span>Network name</span><strong id="network-ssid">—</strong></div>
+                <div class="network-stat"><span>Signal strength</span><strong id="network-signal">—</strong></div>
+                <div class="network-stat"><span>Wi-Fi interface</span><strong id="network-wifi-interface">—</strong></div>
+                <div class="network-stat"><span>Frequency / channel</span><strong id="network-frequency">—</strong></div>
+                <div class="network-stat"><span>Transmit rate</span><strong id="network-tx-rate">—</strong></div>
+                <div class="network-stat"><span>Hostname</span><strong id="network-hostname">—</strong></div>
+                <div class="network-stat"><span>Local hostname</span><strong id="network-local-hostname">—</strong></div>
+                <div class="network-stat"><span>Primary IP</span><strong id="network-primary-ip">—</strong></div>
+                <div class="network-stat"><span>Default interface</span><strong id="network-default-interface">—</strong></div>
+                <div class="network-stat"><span>Default gateway</span><strong id="network-default-gateway">—</strong></div>
+                <div class="network-stat"><span>Traffic since boot</span><strong id="network-traffic">—</strong></div>
+                <div class="network-stat network-stat-wide"><span>Active network interfaces</span><strong id="network-interfaces">—</strong></div>
+            </div>
+            <div class="modal-note" id="network-refreshed">Refreshing automatically while this window is open.</div>
+        </div>
+    </div>
+
     <!-- SETTINGS MODAL (confirm-sim removed) -->
     <div class="modal-backdrop" id="settings-backdrop" aria-hidden="true">
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -140,7 +177,7 @@
                 <div>
                     <div class="modal-eyebrow">Configuration</div>
                     <h2 id="settings-title">Settings</h2>
-                    <div class="modal-note" id="settings-version">Version 0.1.2</div>
+                    <div class="modal-note" id="settings-version">Version 0.1.3</div>
                 </div>
                 <button class="icon-btn" id="close-settings" type="button" aria-label="Close settings">Close</button>
             </div>

@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
+const os = require("os");
 const { execFile } = require("child_process");
 
 const statusFile = path.join(__dirname, "../data/status.json");
@@ -9,6 +10,124 @@ const logFile = path.join(__dirname, "../data/log.csv");
 const dataFolder = path.join(__dirname, "../data");
 const LOG_HEADER = "time_iso,batt_voltage,source_voltage,buck_voltage,relay_mode";
 const SERIAL_MONITOR_MAX_ENTRIES = 500;
+
+function runNetworkCommand(command, args) {
+    return new Promise((resolve) => {
+        execFile(command, args, { timeout: 1500, encoding: "utf8" }, (error, stdout) => {
+            resolve(error ? "" : String(stdout || "").trim());
+        });
+    });
+}
+
+async function getNetworkStats() {
+    const interfaces = Object.entries(os.networkInterfaces())
+        .map(([name, addresses]) => ({
+            name,
+            addresses: (addresses || [])
+                .filter((address) => !address.internal && (address.family === "IPv4" || address.family === 4))
+                .map((address) => address.address)
+        }))
+        .filter((item) => item.addresses.length > 0);
+
+    const routeText = process.platform === "win32"
+        ? ""
+        : await runNetworkCommand("ip", ["-4", "route", "show", "default"]);
+    const defaultRoute = routeText.split(/\r?\n/).find((line) => line.startsWith("default")) || "";
+    const routeParts = defaultRoute.split(/\s+/);
+    const devIndex = routeParts.indexOf("dev");
+    const viaIndex = routeParts.indexOf("via");
+    const defaultInterface = devIndex >= 0 ? routeParts[devIndex + 1] : "";
+    const defaultGateway = viaIndex >= 0 ? routeParts[viaIndex + 1] : "";
+    const primaryIp = interfaces.find((item) => item.name === defaultInterface)?.addresses[0]
+        || interfaces[0]?.addresses[0]
+        || "Unavailable";
+    let networkTraffic = "Unavailable";
+    if (defaultInterface && process.platform === "linux") {
+        try {
+            const statsPath = path.join("/sys/class/net", defaultInterface, "statistics");
+            const receivedBytes = Number(fs.readFileSync(path.join(statsPath, "rx_bytes"), "utf8").trim());
+            const sentBytes = Number(fs.readFileSync(path.join(statsPath, "tx_bytes"), "utf8").trim());
+            const formatBytes = (bytes) => {
+                const units = ["B", "KB", "MB", "GB", "TB"];
+                let value = bytes;
+                let unit = 0;
+                while (value >= 1024 && unit < units.length - 1) {
+                    value /= 1024;
+                    unit += 1;
+                }
+                return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
+            };
+            networkTraffic = `RX ${formatBytes(receivedBytes)} · TX ${formatBytes(sentBytes)}`;
+        } catch {}
+    }
+
+    let wifi = {
+        available: false,
+        interface: "Unavailable",
+        ssid: "Not connected",
+        state: "Not connected",
+        signal: "Unavailable",
+        dbm: null,
+        quality: 0,
+        frequency: "Unavailable",
+        txRate: "Unavailable"
+    };
+
+    if (process.platform === "win32") {
+        const output = await runNetworkCommand("netsh", ["wlan", "show", "interfaces"]);
+        const readField = (name) => output.match(new RegExp(`^\\s*${name}\\s*:\\s*(.+)$`, "im"))?.[1]?.trim() || "";
+        const state = readField("State");
+        const ssid = readField("SSID");
+        const signal = readField("Signal");
+        const signalPercent = Number.parseFloat(signal);
+        const connected = /connected/i.test(state) && Boolean(ssid);
+        wifi = {
+            available: Boolean(output),
+            interface: readField("Name") || "Wi-Fi",
+            ssid: ssid || "Not connected",
+            state: connected ? "Connected" : state || "Not connected",
+            signal: connected && signal ? signal : "Unavailable",
+            dbm: null,
+            quality: Number.isFinite(signalPercent) ? signalPercent : 0,
+            frequency: readField("Channel") ? `Channel ${readField("Channel")}` : "Unavailable",
+            txRate: readField("Transmit rate (Mbps)") || "Unavailable"
+        };
+    } else {
+        const deviceText = await runNetworkCommand("iw", ["dev"]);
+        const wifiInterfaces = [...deviceText.matchAll(/^\s*Interface\s+(\S+)/gm)].map((match) => match[1]);
+        const selectedInterface = wifiInterfaces.includes(defaultInterface) ? defaultInterface : wifiInterfaces[0];
+        if (selectedInterface) {
+            const link = await runNetworkCommand("iw", ["dev", selectedInterface, "link"]);
+            const connected = Boolean(link) && !link.startsWith("Not connected");
+            const ssid = link.match(/^\s*SSID:\s*(.+)$/m)?.[1]?.trim() || "Not connected";
+            const dbmValue = Number.parseFloat(link.match(/^\s*signal:\s*(-?[\d.]+)\s*dBm/m)?.[1]);
+            const quality = Number.isFinite(dbmValue) ? Math.max(0, Math.min(100, Math.round((dbmValue + 100) * 2))) : 0;
+            wifi = {
+                available: true,
+                interface: selectedInterface,
+                ssid,
+                state: connected ? "Connected" : "Not connected",
+                signal: Number.isFinite(dbmValue) ? `${dbmValue.toFixed(0)} dBm` : "Unavailable",
+                dbm: Number.isFinite(dbmValue) ? dbmValue : null,
+                quality,
+                frequency: link.match(/^\s*freq:\s*(.+)$/m)?.[1]?.trim() ? `${link.match(/^\s*freq:\s*(.+)$/m)[1].trim()} MHz` : "Unavailable",
+                txRate: link.match(/^\s*tx bitrate:\s*(.+)$/m)?.[1]?.trim() || "Unavailable"
+            };
+        }
+    }
+
+    const hostname = os.hostname();
+    return {
+        hostname,
+        localHostname: hostname.toLowerCase().endsWith(".local") ? hostname : `${hostname}.local`,
+        primaryIp,
+        defaultInterface: defaultInterface || "Unavailable",
+        defaultGateway: defaultGateway || "Unavailable",
+        networkTraffic,
+        interfaces,
+        wifi
+    };
+}
 
 // Default settings if missing
 const defaultSettings = {
@@ -686,6 +805,17 @@ if (ENABLE_API_SERVER) {
             clearLogs();
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ ok: true }));
+            return;
+        }
+
+        if (pathname === "/api/network" && req.method === "GET") {
+            getNetworkStats().then((stats) => {
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: true, ...stats }));
+            }).catch((error) => {
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: false, error: error.message }));
+            });
             return;
         }
 

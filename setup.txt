@@ -20,7 +20,7 @@ Run the setup
 
 What it does
 ------------
-- Installs nginx and avahi-daemon.
+- Installs nginx, avahi-daemon, and `iw` for Wi-Fi status reporting.
 - Installs Node.js LTS if missing.
 - Serves index.html on port 80 (http://<pi-ip>/).
 - Sets the hostname to skychopper (http://skychopper.local/).

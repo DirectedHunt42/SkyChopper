@@ -19,7 +19,7 @@ echo "Repo: ${ROOT_DIR}"
 
 echo "Installing packages..."
 apt-get update -y
-apt-get install -y nginx avahi-daemon curl
+apt-get install -y nginx avahi-daemon curl iw
 
 # Install Node.js if missing
 if ! command -v node >/dev/null 2>&1; then

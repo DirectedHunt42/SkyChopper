@@ -35,6 +35,9 @@ const updateStatus = document.getElementById('update-status');
 const updateOutput = document.getElementById('update-output');
 const startUpdateButton = document.getElementById('start-update');
 let updatePollTimer = null;
+const networkBackdrop = document.getElementById('network-backdrop');
+const networkButton = document.getElementById('open-network-stats');
+let networkPollTimer = null;
 let logAutoRefreshTimer = null;
 let serialMonitorTimer = null;
 const confirmBackdrop = document.getElementById('confirm-backdrop');
@@ -60,7 +63,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "0.1.2";
+const APP_VERSION = "0.1.3";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1235,6 +1238,90 @@ async function refreshUpdateStatus() {
         updateStatus.textContent = "Waiting for SkyChopper to reconnect...";
     }
 }
+
+function setNetworkText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value || "Unavailable";
+}
+
+async function refreshNetworkStats() {
+    try {
+        const response = await fetch(`${API_BASE}/api/network`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || "Network request failed");
+
+        const wifi = data.wifi || {};
+        const quality = Number.isFinite(Number(wifi.quality)) ? Number(wifi.quality) : 0;
+        const connected = wifi.state === "Connected";
+        const signalClass = !connected || quality <= 0
+            ? "signal-none"
+            : quality < 25 ? "signal-weak"
+                : quality < 50 ? "signal-fair"
+                    : quality < 75 ? "signal-good" : "signal-strong";
+        const wifiLabel = connected
+            ? `Wi-Fi ${quality > 0 ? `${Math.round(quality)}%` : "on"}`
+            : "Wi-Fi off";
+        if (networkButton) {
+            networkButton.classList.remove("signal-none", "signal-weak", "signal-fair", "signal-good", "signal-strong");
+            networkButton.classList.add(signalClass);
+            networkButton.title = `${wifiLabel}${wifi.ssid && connected ? ` · ${wifi.ssid}` : ""}`;
+            networkButton.setAttribute("aria-label", `Open network status. ${networkButton.title}`);
+        }
+        setNetworkText("wifi-button-label", wifiLabel);
+        document.querySelectorAll(".wifi-status-icon .wifi-segment").forEach((segment, index) => {
+            const activeBars = connected && quality > 0 ? Math.max(1, Math.ceil(quality / 25)) : 0;
+            segment.classList.toggle("active", index < activeBars);
+        });
+
+        setNetworkText("network-wifi-state", wifi.state);
+        setNetworkText("network-ssid", wifi.ssid);
+        setNetworkText("network-signal", connected && quality > 0 ? `${wifi.signal} (${Math.round(quality)}%)` : wifi.signal);
+        setNetworkText("network-wifi-interface", wifi.interface);
+        setNetworkText("network-frequency", wifi.frequency);
+        setNetworkText("network-tx-rate", wifi.txRate);
+        setNetworkText("network-hostname", data.hostname);
+        setNetworkText("network-local-hostname", data.localHostname);
+        setNetworkText("network-primary-ip", data.primaryIp);
+        setNetworkText("network-default-interface", data.defaultInterface);
+        setNetworkText("network-default-gateway", data.defaultGateway);
+        setNetworkText("network-traffic", data.networkTraffic);
+        const activeInterfaces = (data.interfaces || []).map((item) => {
+            const primary = item.name === data.defaultInterface ? " (default)" : "";
+            return `${item.name}: ${item.addresses.join(", ")}${primary}`;
+        }).join("\n");
+        setNetworkText("network-interfaces", activeInterfaces || "No active IPv4 interfaces");
+        setNetworkText("network-refreshed", `Updated ${new Date().toLocaleTimeString()}`);
+    } catch (error) {
+        if (networkButton) {
+            networkButton.classList.remove("signal-weak", "signal-fair", "signal-good", "signal-strong");
+            networkButton.classList.add("signal-none");
+            networkButton.title = "Network status unavailable";
+            networkButton.setAttribute("aria-label", "Open network status. Status unavailable.");
+        }
+        setNetworkText("wifi-button-label", "Wi-Fi —");
+        setNetworkText("network-refreshed", `Network details unavailable: ${error.message}`);
+    }
+}
+
+function closeNetworkModal() {
+    if (networkBackdrop) {
+        networkBackdrop.classList.remove("open");
+        networkBackdrop.setAttribute("aria-hidden", "true");
+    }
+    if (networkPollTimer) clearInterval(networkPollTimer);
+    networkPollTimer = null;
+}
+
+networkButton?.addEventListener("click", () => {
+    networkBackdrop.classList.add("open");
+    networkBackdrop.setAttribute("aria-hidden", "false");
+    refreshNetworkStats();
+    if (!networkPollTimer) networkPollTimer = setInterval(refreshNetworkStats, 5000);
+});
+document.getElementById("close-network")?.addEventListener("click", closeNetworkModal);
+networkBackdrop?.addEventListener("click", (event) => { if (event.target === networkBackdrop) closeNetworkModal(); });
+refreshNetworkStats();
+setInterval(refreshNetworkStats, 15000);
 
 document.getElementById("open-update")?.addEventListener("click", () => {
     updateBackdrop.classList.add("open");
