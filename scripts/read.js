@@ -215,6 +215,7 @@ const defaultSettings = {
     batt_on_percent: 80,
     batt_off_percent: 60,
     sim_fallback_enabled: false,
+    force_simulation_enabled: false,
     source_voltage_only: true,
     power_override: "auto",
     title: 1
@@ -614,7 +615,7 @@ function attemptSerialConnection() {
         port.on("open", () => {
             console.log(`✅ Serial bridge connected on ${SERIAL_PORT} @ ${SERIAL_BAUD}`);
             serialPortInstance = port;
-            stopSimulator();                 // serial always wins
+            syncSimulatorFallback();
         });
 
         parser.on("data", (line) => {
@@ -623,6 +624,10 @@ function attemptSerialConnection() {
 
             console.log(`📡 Raw serial data: ${text}`);
             recordSerialMonitor("arduino_to_pi", text);
+            if (loadSettings().force_simulation_enabled === true) {
+                console.log("Forced simulation is enabled; received serial telemetry was ignored.");
+                return;
+            }
 
             try {
                 const data = JSON.parse(text);
@@ -783,7 +788,7 @@ function generateData() {
 function startSimulator() {
     if (simulatorTimer) return;
     simulatorTimer = setInterval(generateData, 1000);
-    console.log("System simulator running (fallback)");
+    console.log("System simulator running");
 }
 
 function stopSimulator() {
@@ -794,11 +799,15 @@ function stopSimulator() {
 }
 
 function syncSimulatorFallback() {
+    const settings = loadSettings();
+    if (settings.force_simulation_enabled === true) {
+        startSimulator();
+        return;
+    }
     if (serialPortInstance) {
         stopSimulator();
         return;
     }
-    const settings = loadSettings();
     if (settings.source_voltage_only === true) {
         stopSimulator();
         return;
@@ -826,7 +835,7 @@ setInterval(() => {
 // Initial simulator check
 syncSimulatorFallback();
 
-// Watch settings.json for sim_fallback_enabled changes
+// Watch simulation and telemetry mode changes.
 fs.watch(settingsFile, { persistent: true }, () => {
     if (pendingSettingsSync) clearTimeout(pendingSettingsSync);
     pendingSettingsSync = setTimeout(() => {

@@ -43,14 +43,11 @@ const documentContent = document.getElementById('document-content');
 const updateBackdrop = document.getElementById('update-backdrop');
 const updateStatus = document.getElementById('update-status');
 const updateOutput = document.getElementById('update-output');
-const startUpdateButton = document.getElementById('start-update');
 let updatePollTimer = null;
 let updateRunning = false;
 let updateAutoCloseTimer = null;
 let documentRequestId = 0;
-const networkBackdrop = document.getElementById('network-backdrop');
-const networkButton = document.getElementById('open-network-stats');
-let networkPollTimer = null;
+const networkState = document.getElementById('network-wifi-state');
 let logAutoRefreshTimer = null;
 let serialMonitorTimer = null;
 const confirmBackdrop = document.getElementById('confirm-backdrop');
@@ -67,6 +64,7 @@ const inputPackEmpty = document.getElementById('setting-pack-empty');
 const inputOnPercent = document.getElementById('setting-on-percent');
 const inputOffPercent = document.getElementById('setting-off-percent');
 const inputSimFallback = document.getElementById('setting-sim-fallback');
+const inputForceSimulation = document.getElementById('setting-force-simulation');
 const inputSourceVoltageOnly = document.getElementById('setting-source-voltage-only');
 const logChart = document.getElementById('logChart');
 const logChartCtx = logChart ? logChart.getContext('2d') : null;
@@ -76,7 +74,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.3.2";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -124,15 +122,15 @@ let lastFrame = performance.now();
 
 const palette =
     {
-        bg: "#0b1120",
-        panel: "#111827",
-        ink: "#e2e8f0",
-        muted: "#94a3b8",
-        accent: "#38bdf8",
-        good: "#22c55e",
-        warn: "#f59e0b",
-        danger: "#ef4444",
-        outline: "#1f2937"
+        bg: "#05080b",
+        panel: "#111111",
+        ink: "#d8e8f4",
+        muted: "#7896ad",
+        accent: "#57b6ef",
+        good: "#48d5a0",
+        warn: "#ffbd69",
+        danger: "#ff737d",
+        outline: "#252525"
     };
 
 const settingsDefaults = {
@@ -144,6 +142,7 @@ const settingsDefaults = {
     batt_on_percent: 80,
     batt_off_percent: 60,
     sim_fallback_enabled: true,
+    force_simulation_enabled: false,
     source_voltage_only: true,
     power_override: "auto",
     title: 1
@@ -256,11 +255,19 @@ function resizeLogChart() {
 function applySettings(next) {
     settingsState = { ...settingsState, ...next };
     if (typeof settingsState.source_voltage_only !== "boolean") settingsState.source_voltage_only = true;
-    if (settingsState.source_voltage_only) settingsState.sim_fallback_enabled = false;
-    document.body.classList.toggle("source-only-mode", settingsState.source_voltage_only);
     if (typeof settingsState.sim_fallback_enabled !== "boolean") {
         settingsState.sim_fallback_enabled = settingsDefaults.sim_fallback_enabled;
     }
+    if (typeof settingsState.force_simulation_enabled !== "boolean") {
+        settingsState.force_simulation_enabled = settingsDefaults.force_simulation_enabled;
+    }
+    if (settingsState.force_simulation_enabled) {
+        settingsState.source_voltage_only = false;
+        settingsState.sim_fallback_enabled = false;
+    } else if (settingsState.source_voltage_only) {
+        settingsState.sim_fallback_enabled = false;
+    }
+    document.body.classList.toggle("source-only-mode", settingsState.source_voltage_only);
     const normalizedTitle = Number.parseInt(settingsState.title, 10);
     settingsState.title = titleModes[normalizedTitle] ? normalizedTitle : settingsDefaults.title;
     const fullPack = Number.isFinite(settingsState.batt_full_voltage) ? settingsState.batt_full_voltage : settingsDefaults.batt_full_voltage;
@@ -293,6 +300,7 @@ function fillSettingsForm() {
     if (inputSimFallback) {
         inputSimFallback.checked = Boolean(settingsState.sim_fallback_enabled);
     }
+    if (inputForceSimulation) inputForceSimulation.checked = Boolean(settingsState.force_simulation_enabled);
     if (inputSourceVoltageOnly) inputSourceVoltageOnly.checked = settingsState.source_voltage_only;
 }
 
@@ -783,9 +791,9 @@ function renderLogChart(rows) {
         ctx2d.stroke();
     };
 
-    if (!document.body.classList.contains("source-only-mode")) drawSmoothSeries("batt", palette.good);
-    drawSmoothSeries("source", palette.warn);
-    if (!document.body.classList.contains("source-only-mode")) drawSmoothSeries("buck", palette.accent);
+    if (!document.body.classList.contains("source-only-mode")) drawSmoothSeries("batt", palette.warn);
+    drawSmoothSeries("source", palette.accent);
+    if (!document.body.classList.contains("source-only-mode")) drawSmoothSeries("buck", palette.good);
 
     ctx2d.strokeStyle = palette.ink;
     ctx2d.lineWidth = 1.6;
@@ -853,7 +861,9 @@ async function updateData() {
         const d = await res.json();
         targetStatus = normalizeStatus(d);
         availableKeys = new Set(Object.keys(d || {}));
-        document.body.classList.toggle("source-only-mode", settingsState.source_voltage_only || d.telemetry_mode === "source_only");
+        const sourceOnlyMode = !settingsState.force_simulation_enabled
+            && (settingsState.source_voltage_only || d.telemetry_mode === "source_only");
+        document.body.classList.toggle("source-only-mode", sourceOnlyMode);
         const displayMetric = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)} V` : "--.-- V"; };
         displayMetric("source-voltage", d.source_voltage);
         displayMetric("battery-voltage", d.batt_voltage);
@@ -865,7 +875,9 @@ async function updateData() {
             sourceRange.textContent = `Expected ${min.toFixed(1)}–${max.toFixed(1)} V`;
         }
         const modeLabel = document.getElementById("telemetry-mode-label");
-        if (modeLabel) modeLabel.textContent = (settingsState.source_voltage_only || d.telemetry_mode === "source_only") ? "Source only" : "Full telemetry";
+        if (modeLabel) modeLabel.textContent = settingsState.force_simulation_enabled
+            ? "Forced simulation"
+            : sourceOnlyMode ? "Source only" : "Full telemetry";
         const telemetryTime = document.getElementById("telemetry-time");
         if (telemetryTime) telemetryTime.textContent = d.time ? new Date(d.time).toLocaleString() : "Waiting for reader";
 
@@ -1144,7 +1156,7 @@ function renderLoop() {
     stepStatus(now - lastFrame);
     lastFrame = now;
     if (turbine) {
-        const isSimulatorEnabled = Boolean(settingsState.sim_fallback_enabled);
+        const isSimulatorEnabled = Boolean(settingsState.sim_fallback_enabled || settingsState.force_simulation_enabled);
         const seconds = 1.25;
         turbine.style.setProperty("--spin", `${seconds}s`);
         if (turbineLabel) {
@@ -1200,15 +1212,25 @@ if (settingsBackdrop) settingsBackdrop.addEventListener("click", (e) => { if (e.
 
 if (inputSimFallback) {
     inputSimFallback.addEventListener("change", () => {
-        if (inputSimFallback.checked && inputSourceVoltageOnly) {
-            inputSourceVoltageOnly.checked = false;
+        if (inputSimFallback.checked) {
+            if (inputSourceVoltageOnly) inputSourceVoltageOnly.checked = false;
+            if (inputForceSimulation) inputForceSimulation.checked = false;
+        }
+    });
+}
+if (inputForceSimulation) {
+    inputForceSimulation.addEventListener("change", () => {
+        if (inputForceSimulation.checked) {
+            if (inputSourceVoltageOnly) inputSourceVoltageOnly.checked = false;
+            if (inputSimFallback) inputSimFallback.checked = false;
         }
     });
 }
 if (inputSourceVoltageOnly) {
     inputSourceVoltageOnly.addEventListener("change", () => {
-        if (inputSourceVoltageOnly.checked && inputSimFallback) {
-            inputSimFallback.checked = false;
+        if (inputSourceVoltageOnly.checked) {
+            if (inputSimFallback) inputSimFallback.checked = false;
+            if (inputForceSimulation) inputForceSimulation.checked = false;
         }
     });
 }
@@ -1222,10 +1244,12 @@ if (saveSettingsBtn) {
             batt_empty_voltage: parseNum(inputPackEmpty?.value, settingsState.batt_empty_voltage),
             batt_on_percent: parseNum(inputOnPercent?.value, settingsState.batt_on_percent),
             batt_off_percent: parseNum(inputOffPercent?.value, settingsState.batt_off_percent),
-            sim_fallback_enabled: Boolean(inputSimFallback?.checked)
+            sim_fallback_enabled: Boolean(inputSimFallback?.checked),
+            force_simulation_enabled: Boolean(inputForceSimulation?.checked)
         };
 
-        const enablingSim = next.sim_fallback_enabled && !next.source_voltage_only && !settingsState.sim_fallback_enabled;
+        const enablingSim = (next.sim_fallback_enabled && !settingsState.sim_fallback_enabled)
+            || (next.force_simulation_enabled && !settingsState.force_simulation_enabled);
 
         if (enablingSim) {
             window._pendingSettings = next;
@@ -1516,15 +1540,16 @@ async function refreshUpdateStatus() {
         const wasRunning = updateRunning;
         updateRunning = data.status === "Starting SkyChopper update..." || data.status === "Updating SkyChopper...";
         const closeUpdateButton = document.getElementById("close-update");
+        const openUpdateButton = document.getElementById("open-update");
         if (closeUpdateButton) closeUpdateButton.disabled = updateRunning;
+        if (openUpdateButton) openUpdateButton.disabled = updateRunning;
         updateStatus.textContent = data.status;
         updateOutput.textContent = data.output || "No updater output yet.";
         updateOutput.scrollTop = updateOutput.scrollHeight;
-        startUpdateButton.disabled = !data.done && data.status !== "Ready to update." && data.status !== "Update complete.";
         if (data.done) {
             updateRunning = false;
             if (closeUpdateButton) closeUpdateButton.disabled = false;
-            startUpdateButton.disabled = false;
+            if (openUpdateButton) openUpdateButton.disabled = false;
             if (updatePollTimer) clearInterval(updatePollTimer);
             updatePollTimer = null;
             if (wasRunning && !updateAutoCloseTimer) {
@@ -1558,16 +1583,10 @@ async function refreshNetworkStats() {
             : quality < 25 ? "signal-weak"
                 : quality < 50 ? "signal-fair"
                     : quality < 75 ? "signal-good" : "signal-strong";
-        const wifiLabel = connected
-            ? `Wi-Fi ${quality > 0 ? `${Math.round(quality)}%` : "on"}`
-            : "Wi-Fi off";
-        if (networkButton) {
-            networkButton.classList.remove("signal-none", "signal-weak", "signal-fair", "signal-good", "signal-strong");
-            networkButton.classList.add(signalClass);
-            networkButton.title = `${wifiLabel}${wifi.ssid && connected ? ` · ${wifi.ssid}` : ""}`;
-            networkButton.setAttribute("aria-label", `Open network status. ${networkButton.title}`);
+        if (networkState) {
+            networkState.classList.remove("signal-none", "signal-weak", "signal-fair", "signal-good", "signal-strong");
+            networkState.classList.add(signalClass);
         }
-        setNetworkText("wifi-button-label", wifiLabel);
         document.querySelectorAll(".wifi-status-icon .wifi-segment").forEach((segment, index) => {
             const activeBars = connected && quality > 0 ? Math.max(1, Math.ceil(quality / 25)) : 0;
             segment.classList.toggle("active", index < activeBars);
@@ -1585,11 +1604,6 @@ async function refreshNetworkStats() {
         setNetworkText("network-default-interface", data.defaultInterface);
         setNetworkText("network-default-gateway", data.defaultGateway);
         setNetworkText("network-traffic", data.networkTraffic);
-        setNetworkText("dash-network-ssid", connected ? (wifi.ssid || "Connected") : "Not connected");
-        setNetworkText("dash-network-signal", connected && quality > 0 ? `${Math.round(quality)}% · ${wifi.signal}` : wifi.state || "Unavailable");
-        setNetworkText("dash-network-ip", data.primaryIp);
-        setNetworkText("dash-network-route", `${data.defaultInterface || "Unavailable"} · ${data.defaultGateway || "Unavailable"}`);
-        setNetworkText("dash-network-traffic", data.networkTraffic);
         const activeInterfaces = (data.interfaces || []).map((item) => {
             const primary = item.name === data.defaultInterface ? " (default)" : "";
             return `${item.name}: ${item.addresses.join(", ")}${primary}`;
@@ -1597,60 +1611,34 @@ async function refreshNetworkStats() {
         setNetworkText("network-interfaces", activeInterfaces || "No active IPv4 interfaces");
         setNetworkText("network-refreshed", `Updated ${new Date().toLocaleTimeString()}`);
     } catch (error) {
-        if (networkButton) {
-            networkButton.classList.remove("signal-weak", "signal-fair", "signal-good", "signal-strong");
-            networkButton.classList.add("signal-none");
-            networkButton.title = "Network status unavailable";
-            networkButton.setAttribute("aria-label", "Open network status. Status unavailable.");
+        if (networkState) {
+            networkState.classList.remove("signal-weak", "signal-fair", "signal-good", "signal-strong");
+            networkState.classList.add("signal-none");
         }
-        setNetworkText("wifi-button-label", "Wi-Fi —");
+        setNetworkText("network-wifi-state", "Unavailable");
+        ["network-ssid", "network-signal", "network-wifi-interface", "network-frequency", "network-tx-rate",
+            "network-hostname", "network-local-hostname", "network-primary-ip", "network-default-interface",
+            "network-default-gateway", "network-traffic"].forEach((id) => setNetworkText(id, "Unavailable"));
+        setNetworkText("network-interfaces", "Unavailable");
         setNetworkText("network-refreshed", `Network details unavailable: ${error.message}`);
     }
 }
-
-function closeNetworkModal() {
-    if (networkBackdrop) {
-        networkBackdrop.classList.remove("open");
-        networkBackdrop.setAttribute("aria-hidden", "true");
-    }
-    if (networkPollTimer) clearInterval(networkPollTimer);
-    networkPollTimer = null;
-}
-
-networkButton?.addEventListener("click", () => {
-    networkBackdrop.classList.add("open");
-    networkBackdrop.setAttribute("aria-hidden", "false");
-    refreshNetworkStats();
-    if (!networkPollTimer) networkPollTimer = setInterval(refreshNetworkStats, 5000);
-});
-document.getElementById("close-network")?.addEventListener("click", closeNetworkModal);
-networkBackdrop?.addEventListener("click", (event) => { if (event.target === networkBackdrop) closeNetworkModal(); });
 refreshNetworkStats();
 setInterval(refreshNetworkStats, 10000);
 
-document.getElementById("open-update")?.addEventListener("click", () => {
+document.getElementById("open-update")?.addEventListener("click", async () => {
+    if (updateRunning) return;
+    if (!window.confirm("Update SkyChopper now? Tracked local changes will be discarded, then the latest repository version will be pulled and setup rerun.")) return;
     document.body.classList.add("update-open");
     updateBackdrop.classList.add("open");
     updateBackdrop.setAttribute("aria-hidden", "false");
     if (updateAutoCloseTimer) clearTimeout(updateAutoCloseTimer);
     updateAutoCloseTimer = null;
-    refreshUpdateStatus();
-    if (!updatePollTimer) updatePollTimer = setInterval(refreshUpdateStatus, 2000);
-});
-document.getElementById("open-readme")?.addEventListener("click", () => openDocumentModal("README.md", "README"));
-document.getElementById("open-license")?.addEventListener("click", () => openDocumentModal("LICENSE.txt", "License"));
-document.getElementById("close-document")?.addEventListener("click", closeDocumentModal);
-documentBackdrop?.addEventListener("click", (event) => {
-    if (event.target === documentBackdrop) closeDocumentModal();
-});
-document.getElementById("close-update")?.addEventListener("click", closeUpdateModal);
-updateBackdrop?.addEventListener("click", (event) => { if (event.target === updateBackdrop) closeUpdateModal(); });
-startUpdateButton?.addEventListener("click", async () => {
-    if (!window.confirm("Update SkyChopper now? This discards tracked local changes, pulls the latest repository version, and reruns setup.")) return;
-    startUpdateButton.disabled = true;
     updateRunning = true;
     const closeUpdateButton = document.getElementById("close-update");
+    const openUpdateButton = document.getElementById("open-update");
     if (closeUpdateButton) closeUpdateButton.disabled = true;
+    if (openUpdateButton) openUpdateButton.disabled = true;
     updateStatus.textContent = "Starting SkyChopper update...";
     updateOutput.textContent = "";
     try {
@@ -1662,10 +1650,18 @@ startUpdateButton?.addEventListener("click", async () => {
     } catch (error) {
         updateRunning = false;
         if (closeUpdateButton) closeUpdateButton.disabled = false;
+        if (openUpdateButton) openUpdateButton.disabled = false;
         updateStatus.textContent = `Update failed to start: ${error.message}`;
-        startUpdateButton.disabled = false;
     }
 });
+document.getElementById("open-readme")?.addEventListener("click", () => openDocumentModal("README.md", "README"));
+document.getElementById("open-license")?.addEventListener("click", () => openDocumentModal("LICENSE.txt", "License"));
+document.getElementById("close-document")?.addEventListener("click", closeDocumentModal);
+documentBackdrop?.addEventListener("click", (event) => {
+    if (event.target === documentBackdrop) closeDocumentModal();
+});
+document.getElementById("close-update")?.addEventListener("click", closeUpdateModal);
+updateBackdrop?.addEventListener("click", (event) => { if (event.target === updateBackdrop) closeUpdateModal(); });
 
 if (confirmClearLogsOk) {
     confirmClearLogsOk.addEventListener("click", async () => {
