@@ -29,6 +29,11 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 # 🔐 FIX: Ensure nginx can traverse directories (prevents 403)
+# Install reader dependencies as the checkout owner to avoid root-owned files.
+REPO_OWNER="$(stat -c '%U' "${ROOT_DIR}")"
+echo "Installing SkyChopper Node.js dependencies..."
+runuser -u "${REPO_OWNER}" -- npm install --omit=dev --ignore-scripts=false --prefix "${ROOT_DIR}"
+
 echo "Fixing permissions for nginx access..."
 chmod o+rx /home || true
 chmod o+rx "$(dirname "${ROOT_DIR}")" || true

@@ -6,6 +6,12 @@
     "read": "node scripts/read.js",
     "read:watch": "nodemon"
   },
+  "dependencies": {
+    "serialport": "^12.0.0"
+  },
+  "allowScripts": {
+    "@serialport/bindings-cpp": true
+  },
   "devDependencies": {
     "nodemon": "^1.14.10"
   }
