@@ -109,7 +109,6 @@
 <body>
 <div class="page">
     <header class="hero">
-        <div class="eyebrow">Power system monitor</div>
         <div class="hero-row">
             <div class="hero-title">
                 <h1 id="dashboard-title">SKYCHOPPER // WIND POWER</h1>
@@ -173,7 +172,7 @@
             <div class="metric"><span>Uptime</span><span id="system-uptime">--</span></div>
             <div class="metric"><span>Temperature</span><span id="system-temp">--</span></div>
             <div class="metric"><span>Platform</span><span id="system-platform">--</span></div>
-            <div class="metric"><span>Dashboard</span><span>v1.3.0</span></div>
+            <div class="metric"><span>Dashboard</span><span>v1.3.1</span></div>
         </section>
 
         <section class="card resources-card" data-collapse-key="resources">
@@ -220,17 +219,6 @@
             <div class="card-footer">Pi UART and Arduino must use matching baud rates and crossed TX/RX wiring.</div>
         </section>
 
-        <section class="card chart-card" data-collapse-key="voltage-history">
-            <h2>Voltage history <span class="card-tools"><button class="settings-btn" id="refresh-log" type="button">Refresh</button></span></h2>
-            <div class="chart-legend">
-                <span class="legend-item"><span class="legend-swatch"></span>Source</span>
-                <span class="legend-item full-telemetry"><span class="legend-swatch batt"></span>Battery</span>
-                <span class="legend-item full-telemetry"><span class="legend-swatch buck"></span>Buck</span>
-                <span id="log-lines-count">Loading log…</span>
-            </div>
-            <div class="chart-wrap"><canvas id="logChart" width="900" height="240" aria-label="Voltage history chart"></canvas></div>
-        </section>
-
         <section class="card reader-card" data-collapse-key="reader-output">
             <h2>Reader output <span id="reader-state" class="status-pill info">Live</span></h2>
             <pre id="reader-log" class="reader-output">Waiting for read.js output…</pre>
@@ -245,6 +233,17 @@
                     <tbody id="recent-log-body"><tr><td colspan="2">Loading…</td></tr></tbody>
                 </table>
             </div>
+        </section>
+
+        <section class="card chart-card" data-collapse-key="voltage-history">
+            <h2>Voltage history <span class="card-tools"><button class="settings-btn" id="refresh-log" type="button">Refresh</button></span></h2>
+            <div class="chart-legend">
+                <span class="legend-item"><span class="legend-swatch"></span>Source</span>
+                <span class="legend-item full-telemetry"><span class="legend-swatch batt"></span>Battery</span>
+                <span class="legend-item full-telemetry"><span class="legend-swatch buck"></span>Buck</span>
+                <span id="log-lines-count">Loading log…</span>
+            </div>
+            <div class="chart-wrap"><canvas id="logChart" width="900" height="240" aria-label="Voltage history chart"></canvas></div>
         </section>
     </main>
 
@@ -482,7 +481,7 @@
                 <button class="danger-btn" id="confirm-sim-ok" type="button">Enable</button>
             </div>
         </div>
-        <footer class="dashboard-footer">Dashboard <span id="app-version">v1.3.0</span> · Raspberry Pi · data refreshes automatically</footer>
+        <footer class="dashboard-footer">Dashboard <span id="app-version">v1.3.1</span> · Raspberry Pi · data refreshes automatically</footer>
     </div>
 </div>
 
