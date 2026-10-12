@@ -25,24 +25,31 @@
 
 html, body { width: 100%; min-height: 100%; margin: 0; }
 body {
-    background: radial-gradient(ellipse at 50% -40%, #123754 0, var(--bg) 58%);
+    background:
+        radial-gradient(ellipse 1100px 620px at 50% -20%, rgba(18, 55, 84, .9) 0%, rgba(18, 55, 84, .45) 48%, transparent 78%),
+        linear-gradient(180deg, var(--bg) 0%, #06101a 100%);
     color: var(--text);
     font: 13px/1.5 "JetBrains Mono", Consolas, monospace;
-    padding: 22px;
+    padding: 24px;
     min-height: 100vh;
 }
 button, input, select { font: inherit; }
 button { color: inherit; }
+body.update-open { overflow: hidden; }
 
-.page { width: min(1600px, 100%); margin: 0 auto; }
-.hero { position: relative; margin-bottom: 28px; padding-right: 0; }
+.page { width: 100%; margin: 0 auto; }
+.hero { position: relative; margin-bottom: 28px; }
 .eyebrow, .subtitle { color: var(--dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
 .eyebrow { margin: 0 0 6px; }
 #app-version { color: var(--blue); margin-left: 8px; }
-.hero-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
-.hero-row h1 { color: var(--blue-soft); font-size: clamp(20px, 2.4vw, 29px); letter-spacing: .08em; margin: 0; }
-.hero-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 7px; }
-.hero-actions > * { max-width: 100%; }
+.hero-row { display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; gap: 16px; }
+.hero-title { min-width: 0; }
+.hero-row h1 { color: var(--blue-soft); font-size: clamp(20px, 2.4vw, 29px); letter-spacing: 2px; margin: 0; }
+.hero-actions { display: grid; justify-items: end; gap: 4px; max-width: 100%; }
+.header-action-buttons { display: grid; justify-items: end; gap: 4px; max-width: 100%; }
+.primary-action-buttons { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 7px; }
+.hero-actions > *, .header-action-buttons > * { max-width: 100%; }
+.primary-action-buttons .settings-btn { padding-inline: 8px; }
 .subtitle { margin-top: 10px; letter-spacing: .02em; text-transform: none; }
 
 .settings-btn, .ghost-btn, .primary-btn, .danger-btn, .icon-btn, .repo-refresh-button,
@@ -51,27 +58,25 @@ button { color: inherit; }
     align-items: center;
     justify-content: center;
     gap: 7px;
-    min-height: 34px;
-    padding: 7px 11px;
+    padding: 8px 12px;
     color: var(--blue-soft);
     background: #0b1a28;
     border: 1px solid #28516f;
     border-radius: 5px;
     cursor: pointer;
     font-weight: 600;
-    font-size: 11px;
-    letter-spacing: .04em;
-    text-transform: uppercase;
 }
 .settings-btn:hover, .ghost-btn:hover, .icon-btn:hover, .repo-refresh-button:hover,
 .dashboard-action:hover { background: #102b42; border-color: var(--blue); }
 .settings-btn img, .dashboard-action img, .icon-btn img { width: 17px; height: 17px; object-fit: contain; }
+.settings-btn img { filter: drop-shadow(0 0 1px rgba(87, 182, 239, .18)); }
 .settings-btn:disabled, button:disabled { cursor: not-allowed; opacity: .5; }
-.update-btn, #start-update { color: var(--amber); border-color: #795832; }
-.update-btn:hover, #start-update:hover { background: #332718; border-color: var(--amber); }
+.update-btn, #start-update { color: var(--amber); }
+#start-update { border-color: #795832; }
+#start-update:hover { background: #332718; border-color: var(--amber); }
 .reboot-btn { color: var(--red); border-color: #713743; }
 .reboot-btn:hover { background: #381923; border-color: var(--red); }
-.reboot-status { flex-basis: 100%; color: var(--amber); text-align: right; font-size: 10px; }
+.reboot-status { color: var(--amber); text-align: right; font-size: 10px; }
 .danger-btn { color: var(--red); border-color: #713743; }
 .danger-btn:hover { background: #381923; border-color: var(--red); }
 .primary-btn { color: #061522; background: var(--blue); border-color: var(--blue); }
@@ -85,20 +90,24 @@ button { color: inherit; }
 .wifi-button.signal-fair { color: var(--amber); }
 .wifi-button.signal-good, .wifi-button.signal-strong { color: var(--green); }
 .wifi-button.signal-none { color: var(--dim); }
+.wifi-card .wifi-signal-display { margin: 4px 0 12px; }
+.wifi-card .wifi-button { justify-content: flex-start; width: 100%; }
+.wifi-card .metric span:last-child { color: var(--blue-soft); }
 
-.dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 18px; align-items: start; }
 .card, .panel {
     min-width: 0;
     padding: 18px;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 10px;
-    overflow: hidden;
+    overflow: auto;
 }
+.card { display: flex; flex-direction: column; aspect-ratio: 1; }
 .card h2 {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     margin: 0 0 14px;
     color: var(--amber);
@@ -112,16 +121,11 @@ button { color: inherit; }
 .card h2:focus-visible { outline: 1px solid var(--blue); outline-offset: 4px; }
 .card h2 > :last-child:not(.panel-toggle) { margin-left: auto; }
 .panel-toggle { flex: 0 0 auto; width: 18px; height: 20px; padding: 0; color: var(--blue); background: transparent; border: 0; cursor: pointer; }
-.panel-toggle::before { display: inline-block; content: "\\25B6"; font-size: 9px; transform: rotate(90deg); transition: transform .2s ease; }
+.panel-toggle::before { display: inline-block; content: "\25B6"; font-size: 9px; transform: rotate(90deg); transition: transform .2s ease; }
 .card.collapsed > :not(h2) { display: none; }
-.card.collapsed { align-self: start; padding-bottom: 10px; }
+.card.collapsed { align-self: start; aspect-ratio: auto; min-height: 0; padding-bottom: 10px; }
 .card.collapsed h2 { margin-bottom: 0; }
 .card.collapsed .panel-toggle::before { transform: rotate(0); }
-.card.telemetry-card { grid-column: span 6; }
-.card.system-card, .card.resources-card, .card.network-card, .card.device-card { grid-column: span 3; }
-.card.chart-card { grid-column: span 8; }
-.card.reader-card { grid-column: span 4; }
-.card.logs-card { grid-column: 1 / -1; }
 .metric {
     display: flex;
     justify-content: space-between;
@@ -137,10 +141,12 @@ button { color: inherit; }
 .voltage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
 .voltage-tile { min-width: 0; padding: 12px; background: #081827; border: 1px solid #183954; border-radius: 6px; }
 .voltage-tile .label { color: var(--dim); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
-.voltage-tile strong { display: block; margin-top: 8px; color: var(--blue-soft); font-size: clamp(20px, 2.8vw, 34px); line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; }
+.voltage-tile strong { display: block; margin-top: 8px; color: var(--blue-soft); font-size: clamp(14px, 1.35vw, 18px); line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .voltage-tile small { display: block; margin-top: 5px; color: var(--dim); font-size: 10px; }
 .voltage-tile.source { border-color: #28608a; background: linear-gradient(150deg, #0c2a42, #081827); }
 .voltage-tile.source strong { color: var(--blue); }
+.voltage-tile.full-telemetry { display: block; }
+.source-only-mode .voltage-grid { grid-template-columns: minmax(0, 1fr); }
 .full-telemetry { display: contents; }
 .source-only-mode .full-telemetry { display: none; }
 .telemetry-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 13px; }
@@ -213,6 +219,9 @@ button { color: inherit; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 999; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2, 8, 15, .78); }
 .modal-backdrop.open { display: flex; }
 .modal { display: flex; flex-direction: column; gap: 13px; width: min(600px, 95vw); max-height: 90vh; padding: 18px; overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 24px 70px #000a; }
+.modal-backdrop.update-backdrop { padding: 0; background: var(--bg); }
+.modal.update-modal { width: 100%; height: 100%; max-height: none; padding: 22px; border: 0; border-radius: 0; box-shadow: none; }
+.update-modal .update-output { flex: 1; min-height: 0; max-height: none; }
 .modal.confirm { max-width: 420px; }
 .modal.network-modal { width: min(760px, 95vw); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -250,33 +259,38 @@ button { color: inherit; }
 .telemetry-mode-note { grid-column: 1 / -1; }
 .settings-version { color: var(--dim); font-size: 10px; }
 .source-only-mode .override-group { display: none; }
+.dashboard-footer { margin-top: 40px; padding: 0 0 8px; color: var(--dim); font-size: 11px; text-align: center; }
+.dashboard-footer #app-version { color: inherit; margin: 0; }
 
 @media (max-width: 1050px) {
-    .card.telemetry-card, .card.chart-card { grid-column: span 6; }
-    .card.system-card, .card.resources-card, .card.network-card, .card.device-card,
-    .card.reader-card { grid-column: span 6; }
+    .hero-row { grid-template-columns: minmax(0, 1fr); align-items: start; }
+    .hero-actions, .header-action-buttons { justify-items: end; }
 }
-@media (max-width: 700px) {
-    body { padding: 13px; }
-    .hero-row { align-items: flex-start; }
-    .hero-actions { justify-content: flex-start; }
-    .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-    .card.telemetry-card, .card.system-card, .card.resources-card, .card.network-card,
-    .card.device-card, .card.chart-card, .card.reader-card, .card.logs-card { grid-column: 1 / -1; }
-    .card { padding: 12px; }
+@media (max-width: 720px) {
+    .hero-actions, .header-action-buttons { justify-items: start; }
+    .primary-action-buttons { justify-content: flex-start; }
+}
+@media (max-width: 600px) {
+    .modal.update-modal { padding: 12px; }
+    .update-modal .modal-header { align-items: flex-start; }
+    .update-modal .modal-header .modal-eyebrow { margin-right: 10px; }
     .voltage-grid { gap: 6px; }
     .voltage-tile { padding: 9px; }
     .voltage-tile strong { font-size: clamp(19px, 7vw, 27px); }
     .serial-monitor-entry { grid-template-columns: 1fr; gap: 2px; }
     .field { grid-template-columns: 1fr 1fr; }
+    .settings-btn { padding: 7px 9px; }
+    .primary-action-buttons .settings-btn span { display: none; }
+    .hero-actions img { width: 18px; height: 18px; }
+    .hero-actions .wifi-status-icon { width: 18px; height: 18px; }
 }
 @media (max-width: 450px) {
-    .settings-btn { padding: 7px 8px; font-size: 9px; }
-    .settings-btn img { width: 15px; height: 15px; }
     .network-stats-grid { grid-template-columns: 1fr; }
     .network-stat-wide { grid-column: auto; }
+    .telemetry-card { aspect-ratio: auto; }
     .voltage-grid { grid-template-columns: 1fr; }
     .voltage-tile { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .voltage-tile.full-telemetry { display: flex; }
     .voltage-tile strong { margin: 0; }
     .voltage-tile small { margin: 0; text-align: right; }
 }

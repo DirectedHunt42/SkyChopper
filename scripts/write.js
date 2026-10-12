@@ -36,6 +36,7 @@ const readerLog = document.getElementById('reader-log');
 const refreshSerialBtn = document.getElementById('refresh-serial');
 const settingsVersion = document.getElementById('settings-version');
 const appVersionLabel = document.getElementById('app-version');
+const liveClock = document.getElementById('live-clock');
 const documentBackdrop = document.getElementById('document-backdrop');
 const documentTitle = document.getElementById('document-title');
 const documentContent = document.getElementById('document-content');
@@ -75,7 +76,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.3.0";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1282,6 +1283,7 @@ async function postAction(path) {
 
 function closeUpdateModal() {
     if (updateRunning) return;
+    document.body.classList.remove("update-open");
     if (updateBackdrop) {
         updateBackdrop.classList.remove("open");
         updateBackdrop.setAttribute("aria-hidden", "true");
@@ -1627,6 +1629,7 @@ refreshNetworkStats();
 setInterval(refreshNetworkStats, 10000);
 
 document.getElementById("open-update")?.addEventListener("click", () => {
+    document.body.classList.add("update-open");
     updateBackdrop.classList.add("open");
     updateBackdrop.setAttribute("aria-hidden", "false");
     if (updateAutoCloseTimer) clearTimeout(updateAutoCloseTimer);
@@ -1841,6 +1844,15 @@ function startPolling() {
     setInterval(updateData, 1000);
 }
 
+function updateLiveClock() {
+    if (!liveClock) return;
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, "0");
+    liveClock.textContent = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
+updateLiveClock();
+setInterval(updateLiveClock, 1000);
 startPolling();
 loadSettings();
 setupCollapsiblePanels();

@@ -109,28 +109,24 @@
 <body>
 <div class="page">
     <header class="hero">
-        <div class="eyebrow">Power system monitor <span id="app-version">v1.2.1</span></div>
+        <div class="eyebrow">Power system monitor</div>
         <div class="hero-row">
-            <h1 id="dashboard-title">SKYCHOPPER // WIND POWER</h1>
+            <div class="hero-title">
+                <h1 id="dashboard-title">SKYCHOPPER // WIND POWER</h1>
+                <div class="subtitle">Live monitor · <span id="live-clock"></span> · auto-refresh every 4 s</div>
+            </div>
             <div class="hero-actions">
-                <button class="settings-btn wifi-button signal-none" id="open-network-stats" type="button" aria-label="Network status unavailable" title="Network status unavailable">
-                    <img src="assets/icons/ethernet.svg" alt="" aria-hidden="true">
-                    <svg class="wifi-status-icon" viewBox="0 0 36 30" aria-hidden="true">
-                        <path class="wifi-segment" d="M2 9 Q18 -3 34 9" />
-                        <path class="wifi-segment" d="M7 15 Q18 7 29 15" />
-                        <path class="wifi-segment" d="M12 21 Q18 16 24 21" />
-                        <circle class="wifi-segment" cx="18" cy="27" r="1.8" />
-                    </svg>
-                    <span id="wifi-button-label">Wi-Fi —</span>
-                </button>
-                <button class="settings-btn" id="open-settings" type="button"><img src="assets/icons/files-config.svg" alt="" aria-hidden="true">Settings</button>
-                <button class="settings-btn" id="open-logs" type="button"><img src="assets/icons/download.svg" alt="" aria-hidden="true">Logs</button>
-                <button class="settings-btn" id="open-readme" type="button"><img src="assets/icons/readme.svg" alt="" aria-hidden="true">README</button>
-                <button class="settings-btn" id="open-license" type="button"><img src="assets/icons/license.svg" alt="" aria-hidden="true">License</button>
-                <button class="settings-btn update-btn" id="open-update" type="button"><img src="assets/icons/update.svg" alt="" aria-hidden="true">Update</button>
-                <button class="settings-btn reboot-btn" id="reboot-pi" type="button"><img src="assets/icons/reboot.svg" alt="" aria-hidden="true">Reboot Pi</button>
+                <div class="header-action-buttons">
+                    <div class="primary-action-buttons">
+                        <button class="settings-btn" id="open-settings" type="button" aria-label="Settings" title="Settings"><img src="assets/icons/settings.svg" alt="" aria-hidden="true"><span>Settings</span></button>
+                        <button class="settings-btn" id="open-logs" type="button" aria-label="Files" title="Files"><img src="assets/icons/files-config.svg" alt="" aria-hidden="true"><span>Files</span></button>
+                        <button class="settings-btn" id="open-readme" type="button" aria-label="README" title="README"><img src="assets/icons/readme.svg" alt="" aria-hidden="true"><span>README</span></button>
+                        <button class="settings-btn" id="open-license" type="button" aria-label="License" title="License"><img src="assets/icons/license.svg" alt="" aria-hidden="true"><span>License</span></button>
+                        <button class="settings-btn update-btn" id="open-update" type="button" aria-label="Update" title="Update"><img src="assets/icons/update.svg" alt="" aria-hidden="true"><span>Update</span></button>
+                        <button class="settings-btn reboot-btn" id="reboot-pi" type="button" aria-label="Reboot Pi" title="Reboot Pi"><img src="assets/icons/reboot.svg" alt="" aria-hidden="true"><span>Reboot Pi</span></button>
+                    </div>
+                </div>
                 <span class="reboot-status" id="reboot-status" role="status" aria-live="polite" hidden></span>
-                
             </div>
         </div>
     </header>
@@ -177,7 +173,7 @@
             <div class="metric"><span>Uptime</span><span id="system-uptime">--</span></div>
             <div class="metric"><span>Temperature</span><span id="system-temp">--</span></div>
             <div class="metric"><span>Platform</span><span id="system-platform">--</span></div>
-            <div class="metric"><span>Dashboard</span><span>v1.2.1</span></div>
+            <div class="metric"><span>Dashboard</span><span>v1.3.0</span></div>
         </section>
 
         <section class="card resources-card" data-collapse-key="resources">
@@ -192,16 +188,27 @@
 
         <section class="card network-card" data-collapse-key="network">
             <h2>Network</h2>
-            <div class="metric"><span>Wi-Fi</span><span id="dash-network-ssid">--</span></div>
-            <div class="wifi-signal-display">
-                <svg class="wifi-icon" viewBox="0 0 36 30" aria-hidden="true">
-                    <path class="wifi-segment" d="M2 9 Q18 -3 34 9"/><path class="wifi-segment" d="M7 15 Q18 7 29 15"/><path class="wifi-segment" d="M12 21 Q18 16 24 21"/><circle class="wifi-segment" cx="18" cy="27" r="1.8"/>
-                </svg>
-                <span id="dash-network-signal">--</span>
-            </div>
             <div class="metric"><span>Primary IP</span><span id="dash-network-ip">--</span></div>
             <div class="metric"><span>Default route</span><span id="dash-network-route">--</span></div>
             <div class="metric"><span>Traffic since boot</span><span id="dash-network-traffic">--</span></div>
+        </section>
+
+        <section class="card wifi-card" data-collapse-key="wifi-status">
+            <h2>Wi-Fi status</h2>
+            <div class="wifi-signal-display">
+                <button class="settings-btn wifi-button signal-none" id="open-network-stats" type="button" aria-label="Network status unavailable" title="Network status unavailable">
+                    <img src="assets/icons/ethernet.svg" alt="" aria-hidden="true">
+                    <svg class="wifi-status-icon" viewBox="0 0 36 30" aria-hidden="true">
+                        <path class="wifi-segment" d="M2 9 Q18 -3 34 9" />
+                        <path class="wifi-segment" d="M7 15 Q18 7 29 15" />
+                        <path class="wifi-segment" d="M12 21 Q18 16 24 21" />
+                        <circle class="wifi-segment" cx="18" cy="27" r="1.8" />
+                    </svg>
+                    <span id="wifi-button-label">Wi-Fi —</span>
+                </button>
+            </div>
+            <div class="metric"><span>Network name</span><span id="dash-network-ssid">--</span></div>
+            <div class="metric"><span>Signal strength</span><span id="dash-network-signal">--</span></div>
         </section>
 
         <section class="card device-card" data-collapse-key="serial-device">
@@ -254,8 +261,8 @@
         </div>
     </div>
 
-    <div class="modal-backdrop" id="update-backdrop" aria-hidden="true">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="update-title">
+    <div class="modal-backdrop update-backdrop" id="update-backdrop" aria-hidden="true">
+        <div class="modal update-modal" role="dialog" aria-modal="true" aria-labelledby="update-title">
             <div class="modal-header">
                 <div>
                     <div class="modal-eyebrow">Maintenance</div>
@@ -475,6 +482,7 @@
                 <button class="danger-btn" id="confirm-sim-ok" type="button">Enable</button>
             </div>
         </div>
+        <footer class="dashboard-footer">Dashboard <span id="app-version">v1.3.0</span> · Raspberry Pi · data refreshes automatically</footer>
     </div>
 </div>
 
