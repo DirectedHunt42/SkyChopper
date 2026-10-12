@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.3.4**
+**Version: 1.3.5**
 
 ## Overview
 
@@ -23,6 +23,7 @@ computes power decisions, logs CSV data, and serves a lightweight API.
 - Status LEDs with voltage-range tooltips for source/battery/buck health.
 - Settings modal with persisted JSON writes (`data/settings.json`) via the local API server.
 - Logs modal with a live 2-minute voltage chart and CSV table.
+- Repository File Tree panel with tracked files and installed/generated file mappings.
 - Serial bridge with auto-reconnect and simulator fallback.
 - Power override (BATT/AUTO/SOURCE) switch synced to settings.
 
@@ -115,14 +116,17 @@ All endpoints are served from `http://localhost:8000` by default.
 - `POST /api/reset-all`: Delete all data files and recreate defaults.
 - `POST /api/clear-logs`: Truncate `data/log.csv` to just the header.
 - `GET /api/network`: Read hostname, active IPv4 interfaces, default route, and Wi-Fi connection details.
+- `GET /api/repo-files`: List repository files and report installed/generated file mappings.
 - `GET /api/update` and `POST /api/update`: Read update progress and start the installed updater.
 
 ## Update from the dashboard
 On a Raspberry Pi installed from a Git checkout, choose **Update** in the
 dashboard and confirm. The updater resets tracked local changes, pulls the
 latest commit, and reruns `setup.sh` so the installed services match the
-updated repository. Untracked files are preserved. The progress window shows
-the updater status and recent output.
+updated repository. Nginx and the SkyChopper telemetry service are restarted
+during setup, and the dashboard reloads automatically when the update finishes;
+a reboot is not required to apply an update. Untracked files are preserved.
+The progress window shows the updater status and recent output.
 
 ## Runtime Behavior
 - Polling: `fetch()` to `data/status.json` every 1000 ms (no cache) with graceful failure handling.

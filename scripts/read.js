@@ -20,8 +20,53 @@ const statusFile = path.join(__dirname, "../data/status.json");
 const settingsFile = path.join(__dirname, "../data/settings.json");
 const logFile = path.join(__dirname, "../data/log.csv");
 const dataFolder = path.join(__dirname, "../data");
+const repoRoot = path.resolve(__dirname, "..");
 const LOG_HEADER = "time_iso,batt_voltage,source_voltage,buck_voltage,relay_mode";
 const SERIAL_MONITOR_MAX_ENTRIES = 500;
+const REPO_ASSOCIATIONS = [
+    { source: "index.html", target: path.join(repoRoot, "index.html") },
+    { source: "assets/", target: path.join(repoRoot, "assets") },
+    { source: "scripts/", target: path.join(repoRoot, "scripts") },
+    { source: "scripts/update.sh", target: "/usr/local/sbin/skychopper-update" },
+    { source: "arduino/", target: path.join(repoRoot, "arduino") },
+    { source: "setup.sh", target: "/etc/systemd/system/skychopper.service", kind: "generated" },
+    { source: "setup.sh", target: "/etc/nginx/sites-available/skychopper", kind: "generated" },
+    { source: "setup.sh", target: "/etc/skychopper-update-repo", kind: "generated" },
+    { source: "data/settings.json", target: path.join(repoRoot, "data", "settings.json"), kind: "generated" },
+    { source: "data/status.json", target: path.join(repoRoot, "data", "status.json"), kind: "generated" },
+    { source: "data/log.csv", target: path.join(repoRoot, "data", "log.csv"), kind: "generated" }
+];
+
+function renderRepoTree(paths, associationMap) {
+    const tree = {};
+    for (const filePath of paths) {
+        let node = tree;
+        const parts = filePath.split("/");
+        for (const part of parts.slice(0, -1)) node = node[part] ||= {};
+        node[parts[parts.length - 1]] = null;
+    }
+
+    const lines = ["."];
+    function renderNode(node, prefix = "", parent = "") {
+        const entries = Object.entries(node).sort(([leftName, leftChild], [rightName, rightChild]) => {
+            if ((leftChild === null) !== (rightChild === null)) return leftChild === null ? 1 : -1;
+            return leftName.localeCompare(rightName, undefined, { sensitivity: "base" });
+        });
+
+        entries.forEach(([name, child], index) => {
+            const last = index === entries.length - 1;
+            const branch = last ? "└── " : "├── ";
+            const entryPath = parent ? `${parent}/${name}` : name;
+            const isDirectory = child !== null;
+            const associations = !isDirectory && associationMap.get(entryPath);
+            const label = `${name}${isDirectory ? "/" : ""}${associations?.length ? `  →  ${associations.join(" | ")}` : ""}`;
+            lines.push(`${prefix}${branch}${label}`);
+            if (isDirectory) renderNode(child, `${prefix}${last ? "    " : "│   "}`, entryPath);
+        });
+    }
+    renderNode(tree);
+    return lines.join("\n");
+}
 
 function runNetworkCommand(command, args) {
     return new Promise((resolve) => {
@@ -871,6 +916,40 @@ if (ENABLE_API_SERVER) {
         if (req.method === "OPTIONS") {
             res.writeHead(204);
             res.end();
+            return;
+        }
+
+        if (pathname === "/api/repo-files" && req.method === "GET") {
+            const gitArgs = ["-c", `safe.directory=${repoRoot}`, "-C", repoRoot, "ls-files", "--cached", "--others", "--exclude-standard", "-z"];
+            execFile("git", gitArgs, { encoding: "buffer", timeout: 5000 }, (error, stdout) => {
+                if (error) {
+                    console.error("Unable to list repository files:", error);
+                    res.writeHead(500, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: false, error: "Could not list repository files" }));
+                    return;
+                }
+
+                const filePaths = stdout.toString("utf8").split("\0").filter(Boolean);
+                const associations = REPO_ASSOCIATIONS.map((entry) => ({
+                    ...entry,
+                    generated: entry.kind === "generated",
+                    installed: fs.existsSync(entry.target)
+                }));
+                const associationMap = new Map();
+                for (const association of associations) {
+                    const targets = associationMap.get(association.source) || [];
+                    targets.push(association.target);
+                    associationMap.set(association.source, targets);
+                }
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({
+                    ok: true,
+                    root: path.basename(repoRoot),
+                    file_count: filePaths.length,
+                    tree: renderRepoTree(filePaths, associationMap),
+                    associations
+                }));
+            });
             return;
         }
 

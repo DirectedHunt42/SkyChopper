@@ -49,6 +49,7 @@ server {
 
     root ${ROOT_DIR};
     index index.html;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
 
     location / {
         try_files \$uri \$uri/ /index.html;

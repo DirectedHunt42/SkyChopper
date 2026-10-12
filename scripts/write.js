@@ -40,6 +40,10 @@ const liveClock = document.getElementById('live-clock');
 const documentBackdrop = document.getElementById('document-backdrop');
 const documentTitle = document.getElementById('document-title');
 const documentContent = document.getElementById('document-content');
+const repoFileStatus = document.getElementById('repo-file-status');
+const repoTree = document.getElementById('repo-tree');
+const repoAssociations = document.getElementById('repo-associations');
+const repoRefreshButton = document.getElementById('repo-refresh-button');
 const updateBackdrop = document.getElementById('update-backdrop');
 const updateStatus = document.getElementById('update-status');
 const updateOutput = document.getElementById('update-output');
@@ -74,7 +78,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.4";
+const APP_VERSION = "1.3.5";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1221,6 +1225,7 @@ if (refreshLogBtn) refreshLogBtn.addEventListener("click", () => {
     loadLogTable();
 });
 if (refreshLogModalBtn) refreshLogModalBtn.addEventListener("click", loadLogTable);
+if (repoRefreshButton) repoRefreshButton.addEventListener("click", loadRepoFiles);
 if (refreshSerialBtn) refreshSerialBtn.addEventListener("click", () => {
     loadSerialMonitor(true);
 });
@@ -1569,6 +1574,36 @@ async function openDocumentModal(fileName, title) {
     }
 }
 
+async function loadRepoFiles() {
+    if (!repoRefreshButton || !repoFileStatus || !repoTree || !repoAssociations) return;
+    repoRefreshButton.disabled = true;
+    repoFileStatus.textContent = "Reading repository tree…";
+    try {
+        const response = await fetch(`${API_BASE}/api/repo-files`, { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "Could not read repository files");
+
+        repoTree.textContent = result.tree || "(Repository is empty)";
+        repoAssociations.replaceChildren();
+        for (const item of result.associations || []) {
+            const row = document.createElement("div");
+            row.className = "repo-association";
+            const source = document.createElement("strong");
+            source.textContent = item.source;
+            const state = item.generated ? "generated" : item.installed ? "installed" : "not installed";
+            row.append(source, document.createTextNode(` → ${item.target} (${state})`));
+            repoAssociations.append(row);
+        }
+        repoFileStatus.textContent = `${result.file_count} files · ${result.root}`;
+    } catch (error) {
+        repoTree.textContent = "Repository tree is unavailable.";
+        repoAssociations.replaceChildren();
+        repoFileStatus.textContent = error.message;
+    } finally {
+        repoRefreshButton.disabled = false;
+    }
+}
+
 async function refreshUpdateStatus() {
     try {
         const response = await fetch(`${API_BASE}/api/update`, { cache: "no-store" });
@@ -1590,10 +1625,13 @@ async function refreshUpdateStatus() {
             if (updatePollTimer) clearInterval(updatePollTimer);
             updatePollTimer = null;
             if (wasRunning && !updateAutoCloseTimer) {
+                const updateSucceeded = data.status === "Update complete.";
+                if (updateSucceeded) updateStatus.textContent = "Update complete. Reloading the dashboard…";
                 updateAutoCloseTimer = setTimeout(() => {
                     updateAutoCloseTimer = null;
-                    closeUpdateModal();
-                }, 5000);
+                    if (updateSucceeded) window.location.reload();
+                    else closeUpdateModal();
+                }, 3000);
             }
         }
     } catch (error) {
@@ -1913,6 +1951,7 @@ setupCollapsiblePanels();
 refreshSystemStats();
 refreshDeviceStats();
 refreshReaderLog();
+loadRepoFiles();
 loadLogTable();
 setInterval(refreshSystemStats, 5000);
 setInterval(refreshDeviceStats, 3000);
