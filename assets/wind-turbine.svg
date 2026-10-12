@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#57b6ef" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title">
+  <title id="title">Wind turbine</title>
+  <path d="M24 19v21M18 42h12M21 32h6"/>
+  <path d="M22.5 15 20 4h8l-2.5 11zM21 17 9 22l4 7 10-9zM27 17l12 5-4 7-10-9z" fill="#57b6ef" stroke="none"/>
+  <circle cx="24" cy="17" r="4" fill="#ffbd69" stroke="#07131f" stroke-width="1.5"/>
+</svg>

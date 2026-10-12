@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/favicon.svg" alt="SkyChopper" width="72" height="72">
+  <img src="assets/wind-turbine.svg" alt="SkyChopper wind turbine" width="72" height="72">
 </p>
 
 <h1 align="center">SkyChopper</h1>

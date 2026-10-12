@@ -159,7 +159,7 @@ let thresholds = {
 function applyTitleMode() {
     const rawTitleMode = Number.parseInt(settingsState.title, 10);
     const titleConfig = titleModes[rawTitleMode] || titleModes[1];
-    document.title = "RTK-Base Dashboard";
+    document.title = "SkyChopper Dashboard";
     if (dashboardTitle) {
         dashboardTitle.textContent = titleConfig.dashboardName;
     }
