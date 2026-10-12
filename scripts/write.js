@@ -74,7 +74,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.2";
+const APP_VERSION = "1.3.3";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1303,6 +1303,26 @@ if (confirmReset) {
 async function postAction(path) {
     const res = await fetch(`${API_BASE}${path}`, { method: "POST" });
     if (!res.ok) throw new Error("Request failed");
+}
+
+if (rebootButton) {
+    rebootButton.addEventListener("click", async () => {
+        if (!window.confirm("Reboot the Raspberry Pi now? The dashboard will be unavailable briefly.")) return;
+        rebootButton.disabled = true;
+        if (rebootStatus) {
+            rebootStatus.hidden = false;
+            rebootStatus.textContent = "Sending reboot command...";
+        }
+        try {
+            const response = await fetch(`${API_BASE}/api/reboot`, { method: "POST" });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || "Reboot failed.");
+            if (rebootStatus) rebootStatus.textContent = "Rebooting Pi...";
+        } catch (error) {
+            if (rebootStatus) rebootStatus.textContent = `Reboot failed: ${error.message}`;
+            rebootButton.disabled = false;
+        }
+    });
 }
 
 function closeUpdateModal() {

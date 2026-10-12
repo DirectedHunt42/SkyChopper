@@ -929,6 +929,19 @@ if (ENABLE_API_SERVER) {
             return;
         }
 
+        if (pathname === "/api/reboot" && req.method === "POST") {
+            execFile("/usr/bin/systemctl", ["--no-block", "reboot"], { timeout: 5000 }, (error) => {
+                if (error) {
+                    res.writeHead(500, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: false, error: `Unable to reboot Raspberry Pi: ${error.message}` }));
+                    return;
+                }
+                res.writeHead(202, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: true, status: "rebooting" }));
+            });
+            return;
+        }
+
         if (pathname === "/api/update" && req.method === "POST") {
             const updater = "/usr/local/sbin/skychopper-update";
             execFile(updater, [], (error) => {
