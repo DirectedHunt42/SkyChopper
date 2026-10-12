@@ -52,7 +52,7 @@ body.update-open { overflow: hidden; }
 .primary-action-buttons .settings-btn { padding-inline: 8px; }
 .subtitle { margin-top: 4px; font-size: 12px; letter-spacing: 0; text-transform: none; }
 
-.settings-btn, .ghost-btn, .primary-btn, .danger-btn, .icon-btn, .repo-refresh-button,
+.settings-btn, .ghost-btn, .primary-btn, .danger-btn, .icon-btn,
 .dashboard-action {
     display: inline-flex;
     align-items: center;
@@ -66,7 +66,7 @@ body.update-open { overflow: hidden; }
     cursor: pointer;
     font-weight: 600;
 }
-.settings-btn:hover, .ghost-btn:hover, .icon-btn:hover, .repo-refresh-button:hover,
+.settings-btn:hover, .ghost-btn:hover, .icon-btn:hover,
 .dashboard-action:hover { background: #1b1b1b; border-color: var(--blue); }
 .settings-btn img, .dashboard-action img, .icon-btn img, .ghost-btn img,
 .primary-btn img, .danger-btn img { width: 18px; height: 18px; object-fit: contain; }
@@ -199,37 +199,24 @@ body.update-open { overflow: hidden; }
 .log-table tr:hover td { background: #1d1d1d; }
 .card-footer, .modal-note, .map-note { margin-top: 9px; color: var(--dim); font-size: 10px; }
 .card-tools, .modal-actions, .modal-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.repo-files-card { aspect-ratio: 1; min-height: 0; max-height: 520px; }
+.repo-files-card { aspect-ratio: auto; min-height: 0; max-height: 520px; overflow-x: hidden; overflow-y: auto; }
 .repo-panel-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 #repo-file-status { color: var(--dim); font-size: 10px; overflow-wrap: anywhere; }
-.repo-refresh-button {
-    flex: 0 0 auto;
-    padding: 4px 8px;
-    color: var(--blue-soft);
-    background: #111;
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 10px;
-}
-.repo-refresh-button:hover { border-color: var(--blue); }
-.repo-refresh-button:disabled { cursor: wait; opacity: .55; }
 .repo-tree {
     min-height: 130px;
-    max-height: 360px;
     margin: 0;
     padding: 10px;
-    overflow: auto;
     color: var(--text);
     background: #080c0a;
     border: 1px solid var(--border);
     border-radius: 5px;
     font-size: 10px;
     line-height: 1.5;
-    white-space: pre;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 .file-category { margin: 14px 0 6px; color: var(--blue-soft); font-size: 10px; }
-.repo-associations { display: grid; gap: 4px; max-height: 190px; overflow: auto; }
+.repo-associations { display: grid; gap: 4px; }
 .repo-association { color: var(--dim); font-size: 9px; overflow-wrap: anywhere; }
 .repo-association strong { color: var(--blue); font-weight: 500; }
 .override-group { margin-left: auto; }

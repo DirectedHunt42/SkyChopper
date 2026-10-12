@@ -43,7 +43,6 @@ const documentContent = document.getElementById('document-content');
 const repoFileStatus = document.getElementById('repo-file-status');
 const repoTree = document.getElementById('repo-tree');
 const repoAssociations = document.getElementById('repo-associations');
-const repoRefreshButton = document.getElementById('repo-refresh-button');
 const updateBackdrop = document.getElementById('update-backdrop');
 const updateStatus = document.getElementById('update-status');
 const updateOutput = document.getElementById('update-output');
@@ -78,7 +77,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.6";
+const APP_VERSION = "1.3.7";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1225,7 +1224,6 @@ if (refreshLogBtn) refreshLogBtn.addEventListener("click", () => {
     loadLogTable();
 });
 if (refreshLogModalBtn) refreshLogModalBtn.addEventListener("click", loadLogTable);
-if (repoRefreshButton) repoRefreshButton.addEventListener("click", loadRepoFiles);
 if (refreshSerialBtn) refreshSerialBtn.addEventListener("click", () => {
     loadSerialMonitor(true);
 });
@@ -1575,8 +1573,7 @@ async function openDocumentModal(fileName, title) {
 }
 
 async function loadRepoFiles() {
-    if (!repoRefreshButton || !repoFileStatus || !repoTree || !repoAssociations) return;
-    repoRefreshButton.disabled = true;
+    if (!repoFileStatus || !repoTree || !repoAssociations) return;
     repoFileStatus.textContent = "Reading repository tree…";
     try {
         const response = await fetch(`${API_BASE}/api/repo-files`, { cache: "no-store" });
@@ -1599,8 +1596,6 @@ async function loadRepoFiles() {
         repoTree.textContent = "Repository tree is unavailable.";
         repoAssociations.replaceChildren();
         repoFileStatus.textContent = error.message;
-    } finally {
-        repoRefreshButton.disabled = false;
     }
 }
 
