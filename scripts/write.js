@@ -74,8 +74,8 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.3";
-const LOG_WINDOW_MS = 2 * 60 * 1000;
+const APP_VERSION = "1.3.4";
+const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
 const LOG_LEFT_HIDE_MS = 10000;
@@ -159,7 +159,7 @@ let thresholds = {
 function applyTitleMode() {
     const rawTitleMode = Number.parseInt(settingsState.title, 10);
     const titleConfig = titleModes[rawTitleMode] || titleModes[1];
-    document.title = titleConfig.dashboardName;
+    document.title = "RTK-Base Dashboard";
     if (dashboardTitle) {
         dashboardTitle.textContent = titleConfig.dashboardName;
     }
@@ -707,10 +707,10 @@ function renderLogChart(rows) {
     const yMin = minV - pad;
     const yMax = maxV + pad;
 
-    const left = 38;
-    const right = 12;
-    const top = 12;
-    const bottom = 30;
+    const left = 54;
+    const right = 16;
+    const top = 16;
+    const bottom = 48;
     const plotW = Math.max(1, width - left - right);
     const plotH = Math.max(1, height - top - bottom);
     const ticks = 4;
@@ -733,6 +733,15 @@ function renderLogChart(rows) {
         ctx2d.fillText(value.toFixed(1), left - 6, y);
     }
 
+    ctx2d.save();
+    ctx2d.translate(12, top + plotH / 2);
+    ctx2d.rotate(-Math.PI / 2);
+    ctx2d.fillStyle = palette.muted;
+    ctx2d.textAlign = "center";
+    ctx2d.textBaseline = "middle";
+    ctx2d.fillText("Voltage (V)", 0, 0);
+    ctx2d.restore();
+
     const visibleStart = displayNow - windowMs + LOG_LEFT_HIDE_MS;
     const visibleWindow = windowMs - LOG_LEFT_HIDE_MS;
     const toX = (t) => {
@@ -741,19 +750,27 @@ function renderLogChart(rows) {
     };
     const toY = (v) => top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
 
-    const tickStart = visibleStart;
-    const tickStep = 5000;
-    const tickEnd = displayNow;
     const tickY = top + plotH;
     ctx2d.strokeStyle = palette.outline;
     ctx2d.lineWidth = 1.2;
-    for (let t = Math.ceil(tickStart / tickStep) * tickStep; t <= tickEnd; t += tickStep) {
+    ctx2d.fillStyle = palette.muted;
+    ctx2d.font = "10px 'JetBrains Mono', ui-monospace, monospace";
+    ctx2d.textBaseline = "top";
+    const xTickCount = 5;
+    for (let i = 0; i <= xTickCount; i++) {
+        const ageMs = LOG_WINDOW_MS * (1 - i / xTickCount);
+        const t = displayNow - ageMs;
         const x = toX(t);
         ctx2d.beginPath();
         ctx2d.moveTo(x, tickY);
-        ctx2d.lineTo(x, tickY + 6);
+        ctx2d.lineTo(x, tickY + 4);
         ctx2d.stroke();
+        ctx2d.textAlign = i === 0 ? "left" : i === xTickCount ? "right" : "center";
+        ctx2d.fillText(i === xTickCount ? "Now" : `${Math.round(ageMs / 60000)}m ago`, x, tickY + 7);
     }
+    ctx2d.textAlign = "center";
+    ctx2d.textBaseline = "bottom";
+    ctx2d.fillText(`Time (last ${LOG_WINDOW_MS / 60000} minutes)`, left + plotW / 2, height - 3);
 
     if (0 >= yMin && 0 <= yMax) {
         const zeroY = toY(0);
@@ -1598,29 +1615,49 @@ async function refreshNetworkStats() {
         const wifi = data.wifi || {};
         const quality = Number.isFinite(Number(wifi.quality)) ? Number(wifi.quality) : 0;
         const connected = wifi.state === "Connected";
-        const signalClass = !connected || quality <= 0
-            ? "signal-none"
-            : quality < 25 ? "signal-weak"
-                : quality < 50 ? "signal-fair"
-                    : quality < 75 ? "signal-good" : "signal-strong";
+        const dbm = Number(wifi.dbm);
+        const hasDbm = wifi.dbm !== null && Number.isFinite(dbm);
+        const dbmThresholds = [-30, -60, -70, -80];
+        const activeBars = !connected
+            ? 0
+            : hasDbm
+                ? dbmThresholds.filter((threshold) => dbm >= threshold).length
+                : Math.ceil(Math.max(0, Math.min(100, quality)) / 25);
+        const signalClass = activeBars === 0 ? "signal-none"
+            : activeBars === 1 ? "signal-weak"
+                : activeBars === 2 ? "signal-fair"
+                    : activeBars === 3 ? "signal-good" : "signal-strong";
         if (networkState) {
             networkState.classList.remove("signal-none", "signal-weak", "signal-fair", "signal-good", "signal-strong");
             networkState.classList.add(signalClass);
         }
+        const wifiIcon = document.querySelector(".wifi-status-icon");
+        if (wifiIcon) {
+            wifiIcon.classList.remove("signal-none", "signal-weak", "signal-fair", "signal-good", "signal-strong");
+            wifiIcon.classList.add(signalClass);
+        }
         document.querySelectorAll(".wifi-status-icon .wifi-segment").forEach((segment, index) => {
-            const activeBars = connected && quality > 0 ? Math.max(1, Math.ceil(quality / 25)) : 0;
-            segment.classList.toggle("active", index < activeBars);
+            const active = connected && (hasDbm
+                ? dbm >= dbmThresholds[index]
+                : index >= 4 - activeBars);
+            segment.classList.toggle("active", active);
         });
 
+        const ethernetInterfaces = (data.interfaces || []).filter((item) => /^(?:eth|en)/i.test(item.name));
+        const ethernetStatus = ethernetInterfaces.length
+            ? `Connected · ${ethernetInterfaces.map((item) => item.name).join(", ")}`
+            : "No active Ethernet connection";
+        setNetworkText("network-ethernet-status", ethernetStatus);
+        document.querySelector(".ethernet-icon")?.classList.toggle("active", ethernetInterfaces.length > 0);
         setNetworkText("network-wifi-state", wifi.state);
         setNetworkText("network-ssid", wifi.ssid);
         setNetworkText("network-signal", connected && quality > 0 ? `${wifi.signal} (${Math.round(quality)}%)` : wifi.signal);
         setNetworkText("network-wifi-interface", wifi.interface);
+        setNetworkText("network-wifi-link", wifi.state);
         setNetworkText("network-frequency", wifi.frequency);
         setNetworkText("network-tx-rate", wifi.txRate);
-        setNetworkText("network-hostname", data.hostname);
-        setNetworkText("network-local-hostname", data.localHostname);
-        setNetworkText("network-primary-ip", data.primaryIp);
+        setNetworkText("system-primary-ip", data.primaryIp);
+        setNetworkText("system-local-hostname", data.localHostname);
         setNetworkText("network-default-interface", data.defaultInterface);
         setNetworkText("network-default-gateway", data.defaultGateway);
         setNetworkText("network-traffic", data.networkTraffic);
@@ -1635,10 +1672,11 @@ async function refreshNetworkStats() {
             networkState.classList.remove("signal-weak", "signal-fair", "signal-good", "signal-strong");
             networkState.classList.add("signal-none");
         }
+        document.querySelector(".ethernet-icon")?.classList.remove("active");
         setNetworkText("network-wifi-state", "Unavailable");
-        ["network-ssid", "network-signal", "network-wifi-interface", "network-frequency", "network-tx-rate",
-            "network-hostname", "network-local-hostname", "network-primary-ip", "network-default-interface",
-            "network-default-gateway", "network-traffic"].forEach((id) => setNetworkText(id, "Unavailable"));
+        ["network-ethernet-status", "network-ssid", "network-signal", "network-wifi-interface", "network-wifi-link",
+            "network-frequency", "network-tx-rate", "network-default-interface", "network-default-gateway",
+            "network-traffic", "system-primary-ip", "system-local-hostname"].forEach((id) => setNetworkText(id, "Unavailable"));
         setNetworkText("network-interfaces", "Unavailable");
         setNetworkText("network-refreshed", `Network details unavailable: ${error.message}`);
     }
@@ -1815,12 +1853,12 @@ async function refreshSystemStats() {
         const data = await response.json();
         const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value ?? "Unavailable"; };
         const bar = (id, percent) => { const el = document.getElementById(id); if (el) el.style.width = `${Math.max(0, Math.min(100, Number(percent) || 0))}%`; };
+        set("system-version", `v${APP_VERSION}`);
         set("system-hostname", data.hostname);
         set("system-uptime", formatUptime(data.uptimeSeconds));
         set("system-temp", Number.isFinite(data.temperatureC) ? `${data.temperatureC.toFixed(1)} °C` : "Unavailable");
-        set("system-platform", data.platform);
-        const cpu = Array.isArray(data.loadAverage) ? data.loadAverage[0] : null;
-        set("cpu-label", Number.isFinite(cpu) ? `${cpu.toFixed(2)} / ${data.cpuCount} cores` : "Unavailable");
+        set("cpu-label", Number.isFinite(data.cpuUsagePercent) ? `${data.cpuUsagePercent.toFixed(1)}%` : "—");
+        bar("cpu-bar", data.cpuUsagePercent);
         set("memory-label", `${formatBytes(data.memory?.usedBytes)} / ${formatBytes(data.memory?.totalBytes)} (${data.memory?.usedPercent ?? "--"}%)`);
         bar("memory-bar", data.memory?.usedPercent);
         set("disk-label", `${formatBytes(data.disk?.usedBytes)} / ${formatBytes(data.disk?.totalBytes)} (${data.disk?.usedPercent ?? "--"}%)`);

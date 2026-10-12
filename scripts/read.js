@@ -142,6 +142,18 @@ async function getNetworkStats() {
 }
 
 async function getSystemStats() {
+    const cpuTimes = os.cpus().reduce((total, cpu) => {
+        const cpuTotal = Object.values(cpu.times).reduce((sum, value) => sum + value, 0);
+        return { idle: total.idle + cpu.times.idle, total: total.total + cpuTotal };
+    }, { idle: 0, total: 0 });
+    const previousSample = previousCpuTimes;
+    previousCpuTimes = cpuTimes;
+    const totalDelta = previousSample ? cpuTimes.total - previousSample.total : 0;
+    const idleDelta = previousSample ? cpuTimes.idle - previousSample.idle : 0;
+    const cpuUsagePercent = totalDelta > 0
+        ? Math.max(0, Math.min(100, ((totalDelta - idleDelta) / totalDelta) * 100))
+        : null;
+
     let temperatureC = null;
     if (process.platform === "linux") {
         try {
@@ -172,6 +184,7 @@ async function getSystemStats() {
         uptimeSeconds: Math.floor(os.uptime()),
         platform: `${os.type()} ${os.release()} (${os.arch()})`,
         cpuCount: os.cpus().length,
+        cpuUsagePercent: Number.isFinite(cpuUsagePercent) ? Number(cpuUsagePercent.toFixed(1)) : null,
         loadAverage: os.loadavg().map((value) => Number(value.toFixed(2))),
         temperatureC: Number.isFinite(temperatureC) ? Number(temperatureC.toFixed(1)) : null,
         memory: {
@@ -268,6 +281,7 @@ const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER !== "0";
 
 const LOG_INTERVAL_MS = 5000;
 const LOG_MAX_LINES = 1000000;
+let previousCpuTimes = null;
 let lastLogAt = 0;
 let logLineCount = 0;
 let pendingSettingsSync = null;

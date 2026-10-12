@@ -82,15 +82,16 @@ body.update-open { overflow: hidden; }
 .primary-btn:hover { background: var(--blue-soft); }
 .wifi-button { text-transform: none; letter-spacing: 0; }
 .wifi-status-icon { width: 16px; height: 16px; }
-.wifi-status-icon .wifi-segment { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; opacity: .24; }
-.wifi-status-icon circle.wifi-segment { fill: currentColor; stroke: none; }
-.wifi-status-icon .wifi-segment.active { opacity: 1; }
+.wifi-status-icon .wifi-segment { fill: none; stroke: #555; stroke-width: 3; stroke-linecap: round; }
+.wifi-status-icon circle.wifi-segment { fill: #555; stroke: none; }
+.wifi-status-icon .wifi-segment.active { stroke: var(--signal-color, #555); }
+.wifi-status-icon circle.wifi-segment.active { fill: var(--signal-color, #555); }
 .wifi-card .wifi-signal-display { margin: 4px 0 12px; }
 .wifi-card { aspect-ratio: auto; min-height: 420px; }
 .wifi-card .network-stats-grid { gap: 4px; }
 .wifi-card .network-stat { gap: 3px; padding: 5px; }
 .wifi-card .network-state { font-size: 12px; }
-.wifi-signal-display > img { width: 16px; height: 16px; object-fit: contain; }
+.wifi-card .wifi-signal-display > span { font-size: 11px; }
 
 .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 18px; align-items: start; }
 .card, .panel {
@@ -119,8 +120,8 @@ body.update-open { overflow: hidden; }
 }
 .card h2:focus-visible { outline: 1px solid var(--blue); outline-offset: 4px; }
 .card h2 > :last-child:not(.panel-toggle) { margin-left: auto; }
-.panel-toggle { flex: 0 0 auto; width: 18px; height: 20px; padding: 0; color: var(--blue); background: transparent; border: 0; cursor: pointer; }
-.panel-toggle::before { display: inline-block; content: "\25B6"; font-size: 9px; transform: rotate(90deg); transition: transform .2s ease; }
+.panel-toggle { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 18px; height: 20px; padding: 0; color: var(--blue); background: transparent; border: 0; line-height: 0; cursor: pointer; }
+.panel-toggle::before { display: block; content: "\25B6"; font-size: 9px; line-height: 1; transform: rotate(90deg); transform-origin: center; transition: transform .2s ease; }
 .card.collapsed > :not(h2) { display: none; }
 .card.collapsed { align-self: start; aspect-ratio: auto; min-height: 0; padding-bottom: 10px; }
 .card.collapsed h2 { margin-bottom: 0; }
@@ -205,7 +206,8 @@ body.update-open { overflow: hidden; }
 .slider-pill { position: absolute; top: 3px; left: 3px; height: calc(100% - 6px); border-radius: 3px; background: var(--blue); transition: transform .2s ease, width .2s ease; }
 .network-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 14px; }
 .wifi-signal-display, .ethernet-status { display: flex; align-items: center; gap: 9px; margin: 8px 0; color: var(--blue-soft); }
-.ethernet-icon { width: 25px; height: 25px; opacity: .8; }
+.ethernet-icon { width: 16px; height: 16px; opacity: .8; }
+.ethernet-icon:not(.active) { filter: grayscale(1); opacity: .55; }
 .wifi-icon { width: 27px; height: 24px; }
 .wifi-icon path, .wifi-icon circle { fill: none; stroke: #42647b; stroke-width: 3; stroke-linecap: round; }
 .wifi-icon circle { fill: #42647b; stroke: none; }
@@ -258,6 +260,7 @@ body.update-open { overflow: hidden; }
 .settings-version { color: var(--dim); font-size: 10px; }
 .source-only-mode .override-group { display: none; }
 .dashboard-footer { margin-top: 40px; padding: 0 0 8px; color: var(--dim); font-size: 11px; text-align: center; }
+.dashboard-footer a { color: var(--blue); }
 .dashboard-footer #app-version { color: inherit; margin: 0; }
 
 @media (max-width: 1200px) {
