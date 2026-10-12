@@ -8,6 +8,8 @@ const statusArduino = document.getElementById('status-arduino');
 const turbineLabel = document.getElementById('turbine-label');
 const openSettings = document.getElementById('open-settings');
 const openLogs = document.getElementById('open-logs');
+const rebootButton = document.getElementById('reboot-pi');
+const rebootStatus = document.getElementById('reboot-status');
 const downloadLog = document.getElementById('download-log');
 const clearLogs = document.getElementById('clear-logs');
 const settingsBackdrop = document.getElementById('settings-backdrop');
@@ -73,7 +75,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 const LOG_WINDOW_MS = 2 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1748,6 +1750,37 @@ function formatBytes(value) {
     return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`;
 }
 
+function setPanelCollapsed(panel, toggle, collapsed) {
+    panel.classList.toggle("collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    const title = panel.dataset.collapseKey.replace(/-/g, " ");
+    toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${title} panel`);
+    try {
+        localStorage.setItem(`skychopper-panel:${panel.dataset.collapseKey}`, collapsed ? "closed" : "open");
+    } catch {}
+}
+
+function setupCollapsiblePanels() {
+    document.querySelectorAll(".dashboard-grid > .card[data-collapse-key]").forEach((panel) => {
+        const header = panel.querySelector(":scope > h2");
+        if (!header) return;
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "panel-toggle";
+        header.insertBefore(toggle, header.firstChild);
+
+        let collapsed = false;
+        try { collapsed = localStorage.getItem(`skychopper-panel:${panel.dataset.collapseKey}`) === "closed"; } catch {}
+        setPanelCollapsed(panel, toggle, collapsed);
+
+        toggle.addEventListener("click", () => setPanelCollapsed(panel, toggle, !panel.classList.contains("collapsed")));
+        header.addEventListener("click", (event) => {
+            if (event.target.closest("button")) return;
+            setPanelCollapsed(panel, toggle, !panel.classList.contains("collapsed"));
+        });
+    });
+}
+
 function formatUptime(seconds) {
     if (!Number.isFinite(Number(seconds))) return "Unavailable";
     const days = Math.floor(seconds / 86400);
@@ -1810,6 +1843,7 @@ function startPolling() {
 
 startPolling();
 loadSettings();
+setupCollapsiblePanels();
 refreshSystemStats();
 refreshDeviceStats();
 refreshReaderLog();

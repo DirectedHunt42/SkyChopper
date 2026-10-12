@@ -35,7 +35,7 @@ button, input, select { font: inherit; }
 button { color: inherit; }
 
 .page { width: min(1600px, 100%); margin: 0 auto; }
-.hero { position: relative; margin-bottom: 22px; padding-right: 0; }
+.hero { position: relative; margin-bottom: 28px; padding-right: 0; }
 .eyebrow, .subtitle { color: var(--dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
 .eyebrow { margin: 0 0 6px; }
 #app-version { color: var(--blue); margin-left: 8px; }
@@ -69,6 +69,9 @@ button { color: inherit; }
 .settings-btn:disabled, button:disabled { cursor: not-allowed; opacity: .5; }
 .update-btn, #start-update { color: var(--amber); border-color: #795832; }
 .update-btn:hover, #start-update:hover { background: #332718; border-color: var(--amber); }
+.reboot-btn { color: var(--red); border-color: #713743; }
+.reboot-btn:hover { background: #381923; border-color: var(--red); }
+.reboot-status { flex-basis: 100%; color: var(--amber); text-align: right; font-size: 10px; }
 .danger-btn { color: var(--red); border-color: #713743; }
 .danger-btn:hover { background: #381923; border-color: var(--red); }
 .primary-btn { color: #061522; background: var(--blue); border-color: var(--blue); }
@@ -83,14 +86,13 @@ button { color: inherit; }
 .wifi-button.signal-good, .wifi-button.signal-strong { color: var(--green); }
 .wifi-button.signal-none { color: var(--dim); }
 
-.dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+.dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: start; }
 .card, .panel {
     min-width: 0;
-    padding: 16px;
-    background: linear-gradient(155deg, rgba(14, 36, 55, .96), rgba(9, 25, 39, .98));
+    padding: 18px;
+    background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: var(--shadow);
+    border-radius: 10px;
     overflow: hidden;
 }
 .card h2 {
@@ -100,13 +102,21 @@ button { color: inherit; }
     gap: 8px;
     margin: 0 0 14px;
     color: var(--amber);
-    font-size: 11px;
-    letter-spacing: .12em;
+    font-size: 12px;
+    letter-spacing: .08em;
     font-weight: 700;
     text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
 }
-.card h2::before { content: ""; width: 6px; height: 6px; margin-right: 2px; background: var(--blue); transform: rotate(45deg); }
-.card h2 > * { margin-left: auto; }
+.card h2:focus-visible { outline: 1px solid var(--blue); outline-offset: 4px; }
+.card h2 > :last-child:not(.panel-toggle) { margin-left: auto; }
+.panel-toggle { flex: 0 0 auto; width: 18px; height: 20px; padding: 0; color: var(--blue); background: transparent; border: 0; cursor: pointer; }
+.panel-toggle::before { display: inline-block; content: "\\25B6"; font-size: 9px; transform: rotate(90deg); transition: transform .2s ease; }
+.card.collapsed > :not(h2) { display: none; }
+.card.collapsed { align-self: start; padding-bottom: 10px; }
+.card.collapsed h2 { margin-bottom: 0; }
+.card.collapsed .panel-toggle::before { transform: rotate(0); }
 .card.telemetry-card { grid-column: span 6; }
 .card.system-card, .card.resources-card, .card.network-card, .card.device-card { grid-column: span 3; }
 .card.chart-card { grid-column: span 8; }
