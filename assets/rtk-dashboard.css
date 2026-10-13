@@ -280,7 +280,80 @@ body.update-open { overflow: hidden; }
 .serial-monitor-time, .serial-monitor-direction { color: var(--dim); }
 .serial-monitor-direction { color: var(--amber); }
 .serial-monitor-message { color: var(--text); overflow-wrap: anywhere; }
-.update-output { min-height: 180px; max-height: 42vh; }
+.modal-backdrop.update-backdrop { align-items: stretch; justify-content: stretch; padding: 0; background: transparent; }
+.update-terminal {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 22px;
+    background: #05080b;
+    color: var(--blue-soft);
+    font: 13px/1.5 "JetBrains Mono", Consolas, monospace;
+}
+.terminal-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid #28516f;
+    padding-bottom: 12px;
+    color: var(--blue-soft);
+    font-weight: 600;
+}
+#update-status { color: var(--amber); font-weight: 400; text-align: right; }
+#update-output {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid #18364a;
+    background: #080d12;
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: 12px/1.55 "JetBrains Mono", Consolas, monospace;
+}
+#apt-upgrade-dialog-backdrop[hidden] { display: none; }
+#apt-upgrade-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10100;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.78);
+}
+.apt-upgrade-dialog {
+    width: min(460px, 100%);
+    padding: 20px;
+    border: 1px solid #28516f;
+    border-radius: 10px;
+    background: var(--card);
+    box-shadow: 0 18px 70px #000;
+}
+.apt-upgrade-dialog h2 { color: var(--blue-soft); font-size: 1rem; letter-spacing: 1px; }
+.apt-upgrade-dialog p { color: var(--dim); margin: 12px 0 18px; font-size: 12px; }
+.apt-upgrade-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.apt-upgrade-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #111;
+    color: var(--blue-soft);
+    font: inherit;
+    cursor: pointer;
+}
+.apt-upgrade-actions button:disabled { cursor: wait; opacity: 0.55; }
+.apt-upgrade-actions img { width: 18px; height: 18px; }
+#apt-upgrade-confirm { color: var(--blue-soft); border-color: #28516f; }
+#apt-upgrade-confirm:hover { background: #0b1b27; border-color: var(--blue); }
+#apt-upgrade-cancel { color: var(--red); border-color: #713333; }
+#apt-upgrade-cancel:hover { background: #3a1111; border-color: var(--red); }
+#apt-upgrade-cancel img { filter: brightness(0) saturate(100%) invert(59%) sepia(52%) saturate(2376%) hue-rotate(310deg) brightness(102%) contrast(101%); }
 .telemetry-mode-note { grid-column: 1 / -1; }
 .settings-version { color: var(--dim); font-size: 10px; }
 .source-only-mode .override-group { display: none; }
@@ -300,9 +373,6 @@ body.update-open { overflow: hidden; }
 @media (max-width: 600px) {
     .modal-backdrop { padding: 10px; }
     .modal:not(.update-modal) { padding: 14px; }
-    .modal.update-modal { padding: 12px; }
-    .update-modal .modal-header { align-items: flex-start; }
-    .update-modal .modal-header .modal-eyebrow { margin-right: 10px; }
     .voltage-grid { gap: 6px; }
     .voltage-tile { padding: 9px; }
     .voltage-tile strong { font-size: clamp(19px, 7vw, 27px); }
@@ -312,6 +382,13 @@ body.update-open { overflow: hidden; }
     .primary-action-buttons .settings-btn span { display: none; }
     .hero-actions img { width: 18px; height: 18px; }
     .hero-actions .wifi-status-icon { width: 18px; height: 18px; }
+}
+@media (max-width: 600px) {
+    .update-terminal { padding: 12px; }
+    .terminal-heading { flex-direction: column; gap: 4px; }
+    #update-status { text-align: left; }
+    .apt-upgrade-actions { justify-content: stretch; }
+    .apt-upgrade-actions button { flex: 1; justify-content: center; }
 }
 @media (max-width: 450px) {
     .network-stats-grid { grid-template-columns: 1fr; }

@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.3.8**
+**Version: 1.3.9**
 
 ## Overview
 
@@ -126,7 +126,9 @@ latest commit, and reruns `setup.sh` so the installed services match the
 updated repository. Nginx and the SkyChopper telemetry service are restarted
 during setup, and the dashboard reloads automatically when the update finishes;
 a reboot is not required to apply an update. Untracked files are preserved.
-The progress window shows the updater status and recent output.
+The progress window shows the updater status and output. After refreshing the
+APT package lists, the updater asks before installing any available system
+package upgrades; declining or not answering within five minutes skips them.
 
 ## Runtime Behavior
 - Polling: `fetch()` to `data/status.json` every 1000 ms (no cache) with graceful failure handling.

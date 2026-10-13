@@ -26,7 +26,8 @@ What it does
 - Sets the hostname to skychopper (http://skychopper.local/).
 - Creates a systemd service to run scripts/read.js at boot.
 - Installs the dashboard updater used by the Update button. It resets tracked
-  local changes, pulls the latest Git version, and reruns setup.sh.
+  local changes, pulls the latest Git version, reruns setup.sh, refreshes APT
+  package lists, and asks before installing available system package upgrades.
 - Enables and starts nginx, avahi, and the SkyChopper service.
 
 Verify

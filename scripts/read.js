@@ -1049,6 +1049,37 @@ if (ENABLE_API_SERVER) {
             return;
         }
 
+        if (pathname === "/api/update/apt-upgrade" && req.method === "POST") {
+            let body = "";
+            req.on("data", (chunk) => { body += chunk; });
+            req.on("end", () => {
+                let approve;
+                try {
+                    approve = JSON.parse(body || "{}").approve;
+                } catch {
+                    res.writeHead(400, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: false, error: "Invalid upgrade decision" }));
+                    return;
+                }
+                if (typeof approve !== "boolean") {
+                    res.writeHead(400, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: false, error: "Upgrade decision must be a boolean" }));
+                    return;
+                }
+                const decision = approve ? "--approve-apt-upgrade" : "--decline-apt-upgrade";
+                execFile("/usr/local/sbin/skychopper-update", [decision], (error) => {
+                    if (error) {
+                        res.writeHead(409, { "Content-Type": "application/json" });
+                        res.end(JSON.stringify({ ok: false, error: error.message }));
+                        return;
+                    }
+                    res.writeHead(202, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: true }));
+                });
+            });
+            return;
+        }
+
         if (pathname === "/api/update" && req.method === "GET") {
             const statusPath = "/var/lib/skychopper/update-status";
             const updateLogPath = "/var/log/skychopper-update.log";

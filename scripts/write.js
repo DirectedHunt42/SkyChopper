@@ -46,9 +46,12 @@ const repoAssociations = document.getElementById('repo-associations');
 const updateBackdrop = document.getElementById('update-backdrop');
 const updateStatus = document.getElementById('update-status');
 const updateOutput = document.getElementById('update-output');
+const aptUpgradeDialog = document.getElementById('apt-upgrade-dialog-backdrop');
+const aptUpgradeMessage = document.getElementById('apt-upgrade-message');
 let updatePollTimer = null;
 let updateRunning = false;
 let updateAutoCloseTimer = null;
+let updateUpgradePromptShown = false;
 let documentRequestId = 0;
 const networkState = document.getElementById('network-wifi-state');
 let logAutoRefreshTimer = null;
@@ -77,7 +80,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.8";
+const APP_VERSION = "1.3.9";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1358,6 +1361,28 @@ function closeUpdateModal() {
     updateAutoCloseTimer = null;
 }
 
+async function respondToAptUpgrade(approve) {
+    const buttons = document.querySelectorAll(".apt-upgrade-actions button");
+    buttons.forEach((button) => { button.disabled = true; });
+    try {
+        const response = await fetch(`${API_BASE}/api/update/apt-upgrade`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ approve })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "Could not submit the system upgrade choice");
+        aptUpgradeDialog.hidden = true;
+        updateStatus.textContent = approve
+            ? "Starting system package upgrade..."
+            : "Continuing without system package upgrades...";
+    } catch (error) {
+        aptUpgradeMessage.textContent = error.message;
+    } finally {
+        buttons.forEach((button) => { button.disabled = false; });
+    }
+}
+
 function closeDocumentModal() {
     documentRequestId += 1;
     documentBackdrop?.classList.remove("open");
@@ -1605,7 +1630,10 @@ async function refreshUpdateStatus() {
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || "Unable to read update status");
         const wasRunning = updateRunning;
-        updateRunning = data.status === "Starting SkyChopper update..." || data.status === "Updating SkyChopper...";
+        updateRunning = data.status === "Starting SkyChopper update..."
+            || data.status === "Updating SkyChopper..."
+            || data.status.startsWith("APT upgrade available:")
+            || data.status === "Upgrading system packages...";
         const closeUpdateButton = document.getElementById("close-update");
         const openUpdateButton = document.getElementById("open-update");
         if (closeUpdateButton) closeUpdateButton.disabled = updateRunning;
@@ -1613,6 +1641,12 @@ async function refreshUpdateStatus() {
         updateStatus.textContent = data.status;
         updateOutput.textContent = data.output || "No updater output yet.";
         updateOutput.scrollTop = updateOutput.scrollHeight;
+        if (data.status.startsWith("APT upgrade available:") && !updateUpgradePromptShown) {
+            updateUpgradePromptShown = true;
+            const packageCount = data.status.match(/APT upgrade available: (\d+)/)?.[1] || "some";
+            aptUpgradeMessage.textContent = `${packageCount} system package(s) can be upgraded. Upgrade output will appear in this progress terminal.`;
+            aptUpgradeDialog.hidden = false;
+        }
         if (data.done) {
             updateRunning = false;
             if (closeUpdateButton) closeUpdateButton.disabled = false;
@@ -1732,6 +1766,8 @@ document.getElementById("open-update")?.addEventListener("click", async () => {
     if (openUpdateButton) openUpdateButton.disabled = true;
     updateStatus.textContent = "Starting SkyChopper update...";
     updateOutput.textContent = "";
+    updateUpgradePromptShown = false;
+    aptUpgradeDialog.hidden = true;
     try {
         const response = await fetch(`${API_BASE}/api/update`, { method: "POST" });
         const data = await response.json();
@@ -1745,6 +1781,8 @@ document.getElementById("open-update")?.addEventListener("click", async () => {
         updateStatus.textContent = `Update failed to start: ${error.message}`;
     }
 });
+document.getElementById("apt-upgrade-cancel")?.addEventListener("click", () => respondToAptUpgrade(false));
+document.getElementById("apt-upgrade-confirm")?.addEventListener("click", () => respondToAptUpgrade(true));
 document.getElementById("open-readme")?.addEventListener("click", () => openDocumentModal("README.md", "README"));
 document.getElementById("open-license")?.addEventListener("click", () => openDocumentModal("LICENSE.txt", "License"));
 document.getElementById("close-document")?.addEventListener("click", closeDocumentModal);
