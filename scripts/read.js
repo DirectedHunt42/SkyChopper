@@ -19,10 +19,13 @@ for (const level of ["log", "warn", "error"]) {
 const statusFile = path.join(__dirname, "../data/status.json");
 const settingsFile = path.join(__dirname, "../data/settings.json");
 const logFile = path.join(__dirname, "../data/log.csv");
+const networkLogFile = path.join(__dirname, "../data/network.csv");
 const dataFolder = path.join(__dirname, "../data");
 const repoRoot = path.resolve(__dirname, "..");
 const LOG_HEADER = "time_iso,batt_voltage,source_voltage,buck_voltage,relay_mode";
+const NETWORK_LOG_HEADER = "time_iso,event,duration_seconds";
 const SERIAL_MONITOR_MAX_ENTRIES = 500;
+const DOWNLOADABLE_DATA_EXTENSIONS = new Set([".csv", ".log", ".json", ".conf", ".ini", ".yaml", ".yml", ".toml"]);
 const REPO_ASSOCIATIONS = [
     { source: "index.html", target: path.join(repoRoot, "index.html") },
     { source: "assets/", target: path.join(repoRoot, "assets") },
@@ -34,7 +37,8 @@ const REPO_ASSOCIATIONS = [
     { source: "setup.sh", target: "/etc/skychopper-update-repo", kind: "generated" },
     { source: "data/settings.json", target: path.join(repoRoot, "data", "settings.json"), kind: "generated" },
     { source: "data/status.json", target: path.join(repoRoot, "data", "status.json"), kind: "generated" },
-    { source: "data/log.csv", target: path.join(repoRoot, "data", "log.csv"), kind: "generated" }
+    { source: "data/log.csv", target: path.join(repoRoot, "data", "log.csv"), kind: "generated" },
+    { source: "data/network.csv", target: path.join(repoRoot, "data", "network.csv"), kind: "generated" }
 ];
 
 function renderRepoTree(paths, associationMap) {
@@ -316,7 +320,13 @@ if (!fs.existsSync(logFile)) {
     console.log("Created log.csv");
 }
 
+if (!fs.existsSync(networkLogFile)) {
+    fs.writeFileSync(networkLogFile, `${NETWORK_LOG_HEADER}\n`);
+    console.log("Created network.csv");
+}
+
 ensureLogHeader();
+ensureNetworkLogHeader();
 
 // ===== CONFIG =====
 const SERIAL_PORT = process.env.SERIAL_PORT || "";
@@ -326,9 +336,26 @@ const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER !== "0";
 
 const LOG_INTERVAL_MS = 5000;
 const LOG_MAX_LINES = 1000000;
+const NETWORK_LOG_MAX_LINES = LOG_MAX_LINES;
+const NETWORK_SAMPLE_INTERVAL_MS = 10000;
 let previousCpuTimes = null;
 let lastLogAt = 0;
 let logLineCount = 0;
+let networkLineCount = 0;
+let networkDisconnected = null;
+let networkDisconnectedAt = null;
+let networkLastDisconnectAt = null;
+let networkLastReconnectAt = null;
+let networkLastDowntimeSeconds = null;
+let networkDisconnectCount = 0;
+let networkReconnectCount = 0;
+let networkDowntimeTotalMs = 0;
+let networkDowntimeCount = 0;
+let networkDisconnectIntervalTotalMs = 0;
+let networkDisconnectIntervalCount = 0;
+let networkPreviousDisconnectAt = null;
+const networkRecentEvents = [];
+let networkSampleInFlight = null;
 let pendingSettingsSync = null;
 let serialMonitorSequence = 0;
 const serialMonitorEntries = [];
@@ -426,6 +453,228 @@ function ensureLogHeader() {
     if (!header) {
         fs.writeFileSync(logFile, `${LOG_HEADER}\n`);
     }
+}
+
+function ensureNetworkLogHeader() {
+    ensureDataFolder();
+    if (!fs.existsSync(networkLogFile)) {
+        fs.writeFileSync(networkLogFile, `${NETWORK_LOG_HEADER}\n`);
+        return;
+    }
+
+    const header = fs.readFileSync(networkLogFile, "utf8").split(/\r?\n/, 1)[0].trim();
+    if (header !== NETWORK_LOG_HEADER) {
+        console.warn("Resetting network.csv because its header is invalid");
+        fs.writeFileSync(networkLogFile, `${NETWORK_LOG_HEADER}\n`);
+    }
+}
+
+function loadNetworkLogState() {
+    ensureNetworkLogHeader();
+    const lines = fs.readFileSync(networkLogFile, "utf8").split(/\r?\n/).filter(Boolean).slice(1);
+    networkLineCount = lines.length;
+    if (networkLineCount > NETWORK_LOG_MAX_LINES) {
+        const retained = lines.slice(-NETWORK_LOG_MAX_LINES);
+        fs.writeFileSync(networkLogFile, `${NETWORK_LOG_HEADER}\n${retained.join("\n")}\n`);
+        networkLineCount = retained.length;
+    }
+
+    for (const line of lines.slice(-NETWORK_LOG_MAX_LINES)) {
+        const [timeIso, event, durationText] = line.split(",");
+        const eventTime = Date.parse(timeIso);
+        if (!Number.isFinite(eventTime) || (event !== "disconnect" && event !== "reconnect")) continue;
+
+        const entry = { time_iso: timeIso, event, duration_seconds: null };
+        if (event === "disconnect") {
+            networkDisconnectCount += 1;
+            networkLastDisconnectAt = timeIso;
+            networkDisconnectedAt = eventTime;
+            if (networkPreviousDisconnectAt !== null) {
+                networkDisconnectIntervalTotalMs += eventTime - networkPreviousDisconnectAt;
+                networkDisconnectIntervalCount += 1;
+            }
+            networkPreviousDisconnectAt = eventTime;
+            networkDisconnected = true;
+        } else {
+            const durationSeconds = Number(durationText);
+            networkReconnectCount += 1;
+            networkLastReconnectAt = timeIso;
+            networkDisconnected = false;
+            networkDisconnectedAt = null;
+            if (Number.isFinite(durationSeconds) && durationSeconds >= 0) {
+                entry.duration_seconds = durationSeconds;
+                networkDowntimeTotalMs += durationSeconds * 1000;
+                networkDowntimeCount += 1;
+                networkLastDowntimeSeconds = durationSeconds;
+            }
+        }
+        networkRecentEvents.push(entry);
+        if (networkRecentEvents.length > 10) networkRecentEvents.shift();
+    }
+}
+
+function trimNetworkLogIfNeeded() {
+    if (networkLineCount <= NETWORK_LOG_MAX_LINES) return;
+    const lines = fs.readFileSync(networkLogFile, "utf8").split(/\r?\n/).filter(Boolean);
+    const retained = lines.slice(1).slice(-NETWORK_LOG_MAX_LINES);
+    fs.writeFileSync(networkLogFile, `${NETWORK_LOG_HEADER}\n${retained.join("\n")}\n`);
+    networkLineCount = retained.length;
+}
+
+function appendNetworkEvent(event, time, durationMs = null) {
+    ensureNetworkLogHeader();
+    const durationSeconds = durationMs === null ? "" : (durationMs / 1000).toFixed(3);
+    const line = `${new Date(time).toISOString()},${event},${durationSeconds}\n`;
+    fs.appendFileSync(networkLogFile, line);
+    networkLineCount += 1;
+    trimNetworkLogIfNeeded();
+
+    const entry = {
+        time_iso: new Date(time).toISOString(),
+        event,
+        duration_seconds: durationMs === null ? null : Number(durationSeconds)
+    };
+    networkRecentEvents.push(entry);
+    if (networkRecentEvents.length > 10) networkRecentEvents.shift();
+    return entry;
+}
+
+function recordNetworkDisconnect(time) {
+    const entry = appendNetworkEvent("disconnect", time);
+    const disconnectTime = Date.parse(entry.time_iso);
+    networkDisconnectCount += 1;
+    networkLastDisconnectAt = entry.time_iso;
+    if (networkPreviousDisconnectAt !== null) {
+        networkDisconnectIntervalTotalMs += disconnectTime - networkPreviousDisconnectAt;
+        networkDisconnectIntervalCount += 1;
+    }
+    networkPreviousDisconnectAt = disconnectTime;
+    networkDisconnected = true;
+    networkDisconnectedAt = disconnectTime;
+}
+
+function recordNetworkState(stats) {
+    const connected = (stats.interfaces || []).length > 0;
+    const now = Date.now();
+
+    if (networkDisconnected === null) {
+        networkDisconnected = !connected;
+        if (!connected) {
+            recordNetworkDisconnect(now);
+            return;
+        }
+        return;
+    }
+
+    if (connected === !networkDisconnected) return;
+    if (connected) {
+        const durationMs = networkDisconnectedAt === null ? null : Math.max(0, now - networkDisconnectedAt);
+        const entry = appendNetworkEvent("reconnect", now, durationMs);
+        networkReconnectCount += 1;
+        networkLastReconnectAt = entry.time_iso;
+        if (durationMs !== null) {
+            networkDowntimeTotalMs += durationMs;
+            networkDowntimeCount += 1;
+            networkLastDowntimeSeconds = durationMs / 1000;
+        }
+        networkDisconnected = false;
+        networkDisconnectedAt = null;
+        return;
+    }
+
+    recordNetworkDisconnect(now);
+}
+
+function getNetworkMonitoringSummary() {
+    const now = Date.now();
+    const currentDowntimeMs = networkDisconnected && networkDisconnectedAt !== null
+        ? Math.max(0, now - networkDisconnectedAt)
+        : null;
+    return {
+        connected: networkDisconnected === false,
+        disconnectCount: networkDisconnectCount,
+        reconnectCount: networkReconnectCount,
+        lastDisconnectAt: networkLastDisconnectAt,
+        lastReconnectAt: networkLastReconnectAt,
+        currentDowntimeSeconds: currentDowntimeMs === null ? null : currentDowntimeMs / 1000,
+        lastDowntimeSeconds: networkLastDowntimeSeconds,
+        averageDowntimeSeconds: networkDowntimeCount ? networkDowntimeTotalMs / networkDowntimeCount / 1000 : null,
+        averageDisconnectIntervalSeconds: networkDisconnectIntervalCount
+            ? networkDisconnectIntervalTotalMs / networkDisconnectIntervalCount / 1000
+            : null,
+        recentEvents: networkRecentEvents.slice().reverse()
+    };
+}
+
+function sampleNetworkStats() {
+    if (networkSampleInFlight) return networkSampleInFlight;
+    networkSampleInFlight = getNetworkStats()
+        .then((stats) => {
+            recordNetworkState(stats);
+            return stats;
+        })
+        .finally(() => {
+            networkSampleInFlight = null;
+        });
+    return networkSampleInFlight;
+}
+
+function listDownloadableFiles() {
+    ensureDataFolder();
+    return fs.readdirSync(dataFolder, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && DOWNLOADABLE_DATA_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+        .map((entry) => {
+            const extension = path.extname(entry.name).toLowerCase();
+            const category = extension === ".csv" || extension === ".log"
+                ? "Logs"
+                : entry.name === "settings.json" ? "Configuration" : "Runtime data";
+            const descriptions = {
+                "log.csv": "Voltage and telemetry history",
+                "network.csv": "Network disconnect and reconnect history",
+                "settings.json": "Dashboard configuration",
+                "status.json": "Current telemetry status"
+            };
+            return {
+                id: entry.name,
+                name: entry.name === "log.csv" ? "Voltage log"
+                    : entry.name === "network.csv" ? "Network connection log"
+                        : entry.name,
+                category,
+                description: descriptions[entry.name] || "SkyChopper data file",
+                filename: entry.name,
+                size: fs.statSync(path.join(dataFolder, entry.name)).size
+            };
+        })
+        .sort((left, right) => left.category.localeCompare(right.category) || left.filename.localeCompare(right.filename));
+}
+
+function getDownloadableFile(id) {
+    if (typeof id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) return null;
+    const item = listDownloadableFiles().find((file) => file.id === id);
+    if (!item) return null;
+
+    const dataRoot = fs.realpathSync(dataFolder);
+    const resolvedPath = fs.realpathSync(path.join(dataRoot, item.filename));
+    if (!resolvedPath.startsWith(`${dataRoot}${path.sep}`) || !fs.statSync(resolvedPath).isFile()) return null;
+    return { ...item, path: resolvedPath };
+}
+
+function resetNetworkLogState() {
+    fs.writeFileSync(networkLogFile, `${NETWORK_LOG_HEADER}\n`);
+    networkLineCount = 0;
+    networkDisconnected = null;
+    networkDisconnectedAt = null;
+    networkLastDisconnectAt = null;
+    networkLastReconnectAt = null;
+    networkLastDowntimeSeconds = null;
+    networkDisconnectCount = 0;
+    networkReconnectCount = 0;
+    networkDowntimeTotalMs = 0;
+    networkDowntimeCount = 0;
+    networkDisconnectIntervalTotalMs = 0;
+    networkDisconnectIntervalCount = 0;
+    networkPreviousDisconnectAt = null;
+    networkRecentEvents.length = 0;
 }
 
 function countLogLines() {
@@ -546,6 +795,7 @@ function writeSourceOnlyStatus(sourceVoltage) {
 }
 
 countLogLines();
+loadNetworkLogState();
 
 function loadSettings() {
     try {
@@ -645,6 +895,7 @@ function resetAllData() {
     fs.writeFileSync(settingsFile, JSON.stringify(defaultSettings, null, 2));
     fs.writeFileSync(statusFile, JSON.stringify(defaultStatus, null, 2));
     fs.writeFileSync(logFile, `${LOG_HEADER}\n`);
+    resetNetworkLogState();
     logLineCount = 0;
     lastLogAt = 0;
 }
@@ -905,6 +1156,12 @@ fs.watch(settingsFile, { persistent: true }, () => {
 
 // ===== API SERVER =====
 if (ENABLE_API_SERVER) {
+    const sampleNetwork = () => {
+        sampleNetworkStats().catch((error) => console.error("Unable to sample network status:", error));
+    };
+    sampleNetwork();
+    setInterval(sampleNetwork, NETWORK_SAMPLE_INTERVAL_MS);
+
     const server = http.createServer((req, res) => {
         const requestUrl = new URL(req.url || "/", `http://localhost:${HTTP_PORT}`);
         const pathname = requestUrl.pathname || "/";
@@ -953,6 +1210,52 @@ if (ENABLE_API_SERVER) {
             return;
         }
 
+        if (pathname === "/api/files" && req.method === "GET") {
+            try {
+                res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+                res.end(JSON.stringify({ ok: true, files: listDownloadableFiles() }));
+            } catch (error) {
+                console.error("Unable to list downloadable files:", error);
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: false, error: "Could not list downloadable files" }));
+            }
+            return;
+        }
+
+        if (pathname.startsWith("/api/files/") && req.method === "GET") {
+            let id;
+            try {
+                id = decodeURIComponent(pathname.slice("/api/files/".length));
+            } catch {
+                res.writeHead(400, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: false, error: "Invalid file identifier" }));
+                return;
+            }
+            let file;
+            try {
+                file = getDownloadableFile(id);
+                if (!file) {
+                    res.writeHead(404, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: false, error: "Unknown or unavailable file" }));
+                    return;
+                }
+                const contents = fs.readFileSync(file.path);
+                res.writeHead(200, {
+                    "Content-Type": "application/octet-stream",
+                    "Content-Disposition": `attachment; filename="${file.filename}"`,
+                    "Content-Length": contents.length,
+                    "X-Content-Type-Options": "nosniff",
+                    "Cache-Control": "no-store"
+                });
+                res.end(contents);
+            } catch (error) {
+                console.error(`Unable to download ${id}:`, error);
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: false, error: "Could not download the requested file" }));
+            }
+            return;
+        }
+
         if (pathname === "/api/settings" && req.method === "POST") {
             let body = "";
             req.on("data", (chunk) => { body += chunk; });
@@ -987,9 +1290,9 @@ if (ENABLE_API_SERVER) {
         }
 
         if (pathname === "/api/network" && req.method === "GET") {
-            getNetworkStats().then((stats) => {
+            sampleNetworkStats().then((stats) => {
                 res.writeHead(200, { "Content-Type": "application/json" });
-                res.end(JSON.stringify({ ok: true, ...stats }));
+                res.end(JSON.stringify({ ok: true, ...stats, monitoring: getNetworkMonitoringSummary() }));
             }).catch((error) => {
                 res.writeHead(500, { "Content-Type": "application/json" });
                 res.end(JSON.stringify({ ok: false, error: error.message }));

@@ -168,7 +168,7 @@
 
         <section class="card system-card" data-collapse-key="system">
             <h2>System</h2>
-            <div class="metric"><span>Dashboard version</span><span id="system-version">v1.3.10</span></div>
+            <div class="metric"><span>Dashboard version</span><span id="system-version">v1.3.11</span></div>
             <div class="metric"><span>Hostname</span><span id="system-hostname">--</span></div>
             <div class="metric"><span>Uptime</span><span id="system-uptime">--</span></div>
             <div class="metric"><span>Temperature</span><span id="system-temp">--</span></div>
@@ -214,6 +214,19 @@
                 <div class="network-stat"><span>Default interface</span><strong id="network-default-interface">—</strong></div>
                 <div class="network-stat"><span>Default gateway</span><strong id="network-default-gateway">—</strong></div>
                 <div class="network-stat network-stat-wide"><span>Active network interfaces</span><strong id="network-interfaces">—</strong></div>
+            </div>
+            <div class="network-stats-grid network-history-stats">
+                <div class="network-stat"><span>Connection</span><strong id="network-monitor-state">Waiting for network sample…</strong></div>
+                <div class="network-stat"><span>Disconnects recorded</span><strong id="network-disconnect-count">0</strong></div>
+                <div class="network-stat"><span>Last disconnected</span><strong id="network-last-disconnect">Never</strong></div>
+                <div class="network-stat"><span>Last reconnected</span><strong id="network-last-reconnect">Never</strong></div>
+                <div class="network-stat"><span>Current / last outage</span><strong id="network-current-downtime">—</strong></div>
+                <div class="network-stat"><span>Average outage</span><strong id="network-average-downtime">—</strong></div>
+                <div class="network-stat network-stat-wide"><span>Average time between disconnects</span><strong id="network-average-interval">—</strong></div>
+            </div>
+            <div class="network-history">
+                <div class="network-history-heading">Recent disconnects and reconnects</div>
+                <ol id="network-event-history" aria-live="polite"><li>No network events recorded.</li></ol>
             </div>
             <div class="card-footer" id="network-refreshed">Refreshing network details…</div>
         </section>
@@ -309,7 +322,7 @@
                 <div>
                     <div class="modal-eyebrow">Configuration</div>
                     <h2 id="settings-title">Settings</h2>
-                    <div class="modal-note" id="settings-version">Version 1.3.10</div>
+                    <div class="modal-note" id="settings-version">Version 1.3.11</div>
                 </div>
                 <button class="icon-btn" id="close-settings" type="button" aria-label="Close settings"><img src="assets/icons/close.svg" alt="" aria-hidden="true"><span>Close</span></button>
             </div>
@@ -357,18 +370,21 @@
 
     <!-- LOGS MODAL -->
     <div class="modal-backdrop" id="logs-backdrop" aria-hidden="true">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="logs-title">
+        <div class="modal files-modal" role="dialog" aria-modal="true" aria-labelledby="logs-title">
             <div class="modal-header">
                 <div>
-                    <div class="modal-eyebrow">Logs</div>
-                    <h2 id="logs-title">Log Controls</h2>
+                    <div class="modal-eyebrow">Files</div>
+                    <h2 id="logs-title">Logs &amp; Configuration</h2>
                 </div>
                 <div class="modal-header-actions">
                     <button class="ghost-btn" id="refresh-log-modal" type="button"><img src="assets/icons/refresh.svg" alt="" aria-hidden="true"><span>Refresh</span></button>
                     <button class="icon-btn" id="close-logs" type="button" aria-label="Close logs"><img src="assets/icons/close.svg" alt="" aria-hidden="true"><span>Close</span></button>
                 </div>
             </div>
-            <div class="modal-note">Download or clear the long-term CSV log stored on the Pi.</div>
+            <div class="modal-note">Download the available log and configuration files stored by SkyChopper.</div>
+            <div id="download-file-list" class="download-file-list" aria-live="polite">Loading files…</div>
+            <div id="download-file-status" class="modal-note" role="status" aria-live="polite"></div>
+            <div class="modal-note">Recent voltage history and log controls</div>
             <div class="log-table-wrap" id="log-table-wrap">
                 <table class="log-table" id="log-table">
                     <thead>
@@ -484,7 +500,7 @@
             </div>
         </div>
     </div>
-    <footer class="dashboard-footer"><a href="https://github.com/DirectedHunt42/SkyChopper" target="_blank" rel="noopener noreferrer">SkyChopper</a> Dashboard <span id="app-version">v1.3.10</span> · Raspberry Pi · data refreshes automatically</footer>
+    <footer class="dashboard-footer"><a href="https://github.com/DirectedHunt42/SkyChopper" target="_blank" rel="noopener noreferrer">SkyChopper</a> Dashboard <span id="app-version">v1.3.11</span> · Raspberry Pi · data refreshes automatically</footer>
 </div>
 
 <script src="scripts/write.js"></script>

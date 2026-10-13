@@ -25,6 +25,8 @@ const closeSerialMonitor = document.getElementById('close-serial-monitor');
 const logTableWrap = document.getElementById('log-table-wrap');
 const logTableBody = document.getElementById('log-table-body');
 const logTableHead = document.querySelector('#log-table thead tr');
+const downloadFileList = document.getElementById('download-file-list');
+const downloadFileStatus = document.getElementById('download-file-status');
 const logLinesCount = document.getElementById('log-lines-count');
 const serialMonitorPanel = document.getElementById('serial-monitor-panel');
 const toggleSerialMonitorBtn = document.getElementById('toggle-serial-monitor');
@@ -80,7 +82,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.10";
+const APP_VERSION = "1.3.11";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -400,7 +402,11 @@ function openLogsModal() {
     logsBackdrop.classList.add("open");
     logsBackdrop.setAttribute("aria-hidden", "false");
     loadLogTable();
-    if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(loadLogTable, LOG_REFRESH_MS);
+    loadDownloadFiles();
+    if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(() => {
+        loadLogTable();
+        loadDownloadFiles();
+    }, LOG_REFRESH_MS);
 }
 
 function closeLogsModal() {
@@ -568,6 +574,139 @@ async function loadSerialMonitor(isRefresh = false) {
         if (!serialMonitorEntries.length) {
             renderSerialMonitor();
         }
+    }
+}
+
+function formatNetworkDuration(seconds) {
+    if (seconds === null || seconds === undefined || seconds === "") return "—";
+    const duration = Number(seconds);
+    if (!Number.isFinite(duration)) return "—";
+    let remaining = Math.max(0, Math.floor(duration));
+    const days = Math.floor(remaining / 86400);
+    remaining %= 86400;
+    const hours = Math.floor(remaining / 3600);
+    remaining %= 3600;
+    const minutes = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    const parts = [];
+    if (days) parts.push(`${days}d`);
+    if (hours || days) parts.push(`${hours}h`);
+    if (minutes || hours || days) parts.push(`${minutes}m`);
+    parts.push(`${secs}s`);
+    return parts.join(" ");
+}
+
+function formatNetworkTimestamp(value) {
+    const date = value ? new Date(value) : null;
+    return date && Number.isFinite(date.getTime()) ? date.toLocaleString() : "Never";
+}
+
+function renderNetworkHistory(events) {
+    const list = document.getElementById("network-event-history");
+    if (!list) return;
+    list.replaceChildren();
+    if (!Array.isArray(events) || !events.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "No network events recorded.";
+        list.appendChild(empty);
+        return;
+    }
+    for (const event of events) {
+        const item = document.createElement("li");
+        const timestamp = formatNetworkTimestamp(event.time_iso);
+        item.textContent = event.event === "reconnect"
+            ? `Reconnected · ${timestamp} · outage ${formatNetworkDuration(event.duration_seconds)}`
+            : `Disconnected · ${timestamp}`;
+        list.appendChild(item);
+    }
+}
+
+async function loadDownloadFiles() {
+    if (!downloadFileList || !downloadFileStatus) return;
+    downloadFileStatus.textContent = "";
+    try {
+        const response = await fetch(`${API_BASE}/api/files`, { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "Could not list files");
+        renderDownloadFiles(result.files || []);
+    } catch (error) {
+        downloadFileList.textContent = "Files could not be loaded.";
+        downloadFileStatus.textContent = error.message;
+    }
+}
+
+function renderDownloadFiles(files) {
+    downloadFileList.replaceChildren();
+    if (!files.length) {
+        downloadFileList.textContent = "No log or configuration files are available.";
+        return;
+    }
+    const categories = new Map();
+    for (const file of files) {
+        if (!categories.has(file.category)) categories.set(file.category, []);
+        categories.get(file.category).push(file);
+    }
+    for (const [category, categoryFiles] of categories) {
+        const heading = document.createElement("h3");
+        heading.className = "file-category";
+        heading.textContent = category;
+        downloadFileList.appendChild(heading);
+        for (const file of categoryFiles) {
+            const row = document.createElement("div");
+            row.className = "download-file-item";
+            const details = document.createElement("div");
+            details.className = "download-file-details";
+            const name = document.createElement("strong");
+            name.textContent = file.name;
+            const description = document.createElement("span");
+            const size = Number.isFinite(Number(file.size)) ? ` · ${formatFileSize(Number(file.size))}` : "";
+            description.textContent = `${file.description} · ${file.filename}${size}`;
+            details.append(name, description);
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "ghost-btn download-file-button";
+            button.innerHTML = '<img src="assets/icons/download.svg" alt="" aria-hidden="true"><span>Download</span>';
+            button.setAttribute("aria-label", `Download ${file.filename}`);
+            button.addEventListener("click", () => downloadDataFile(file, button));
+            row.append(details, button);
+            downloadFileList.appendChild(row);
+        }
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function downloadDataFile(file, button) {
+    downloadFileStatus.textContent = `Preparing ${file.filename}…`;
+    button.disabled = true;
+    try {
+        const response = await fetch(`${API_BASE}/api/files/${encodeURIComponent(file.id)}`, { cache: "no-store" });
+        if (!response.ok) {
+            let message = `Could not download ${file.filename}`;
+            try {
+                const result = await response.json();
+                message = result.error || message;
+            } catch {}
+            throw new Error(message);
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = file.filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadFileStatus.textContent = `Downloaded ${file.filename}.`;
+    } catch (error) {
+        downloadFileStatus.textContent = error.message;
+    } finally {
+        button.disabled = false;
     }
 }
 
@@ -1226,7 +1365,10 @@ if (downloadLog) {
 if (refreshLogBtn) refreshLogBtn.addEventListener("click", () => {
     loadLogTable();
 });
-if (refreshLogModalBtn) refreshLogModalBtn.addEventListener("click", loadLogTable);
+if (refreshLogModalBtn) refreshLogModalBtn.addEventListener("click", () => {
+    loadLogTable();
+    loadDownloadFiles();
+});
 if (refreshSerialBtn) refreshSerialBtn.addEventListener("click", () => {
     loadSerialMonitor(true);
 });
@@ -1733,6 +1875,16 @@ async function refreshNetworkStats() {
             return `${item.name}: ${item.addresses.join(", ")}${primary}`;
         }).join("\n");
         setNetworkText("network-interfaces", activeInterfaces || "No active IPv4 interfaces");
+        const monitoring = data.monitoring || {};
+        setNetworkText("network-monitor-state", monitoring.connected ? "Connected (IPv4)" : "Disconnected");
+        setNetworkText("network-disconnect-count", String(monitoring.disconnectCount ?? 0));
+        setNetworkText("network-last-disconnect", formatNetworkTimestamp(monitoring.lastDisconnectAt));
+        setNetworkText("network-last-reconnect", formatNetworkTimestamp(monitoring.lastReconnectAt));
+        const outageSeconds = monitoring.currentDowntimeSeconds ?? monitoring.lastDowntimeSeconds;
+        setNetworkText("network-current-downtime", formatNetworkDuration(outageSeconds));
+        setNetworkText("network-average-downtime", formatNetworkDuration(monitoring.averageDowntimeSeconds));
+        setNetworkText("network-average-interval", formatNetworkDuration(monitoring.averageDisconnectIntervalSeconds));
+        renderNetworkHistory(monitoring.recentEvents);
         setNetworkText("network-refreshed", `Updated ${new Date().toLocaleTimeString()}`);
     } catch (error) {
         if (networkState) {
@@ -1745,6 +1897,7 @@ async function refreshNetworkStats() {
             "network-frequency", "network-tx-rate", "network-default-interface", "network-default-gateway",
             "network-traffic", "system-primary-ip", "system-local-hostname"].forEach((id) => setNetworkText(id, "Unavailable"));
         setNetworkText("network-interfaces", "Unavailable");
+        setNetworkText("network-monitor-state", "Unavailable");
         setNetworkText("network-refreshed", `Network details unavailable: ${error.message}`);
     }
 }

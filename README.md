@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.3.10**
+**Version: 1.3.11**
 
 ## Overview
 
@@ -115,7 +115,9 @@ All endpoints are served from `http://localhost:8000` by default.
 - `POST /api/settings`: Persist settings JSON. Body is merged over defaults.
 - `POST /api/reset-all`: Delete all data files and recreate defaults.
 - `POST /api/clear-logs`: Truncate `data/log.csv` to just the header.
-- `GET /api/network`: Read hostname, active IPv4 interfaces, default route, and Wi-Fi connection details.
+- `GET /api/network`: Read hostname, active IPv4 interfaces, default route, Wi-Fi connection details, and outage history.
+- `GET /api/files`: List downloadable logs and runtime configuration files.
+- `GET /api/files/:id`: Download a listed log or runtime configuration file.
 - `GET /api/repo-files`: List repository files and report installed/generated file mappings.
 - `GET /api/update` and `POST /api/update`: Read update progress and start the installed updater.
 
@@ -135,7 +137,7 @@ package upgrades; declining or not answering within five minutes skips them.
 - Rendering: a requestAnimationFrame loop interpolates toward the latest telemetry for smooth UI changes.
 - Turbine animation: spin rate derived from normalized battery voltage between `batt_empty_voltage` and `batt_full_voltage`.
 - Status indicators: LED state is computed from live voltage vs. expected ranges, with tooltips updated per poll.
-- Logging: CSV rows written every 5 seconds (trimmed to 1,000,000 lines).
+- Logging: voltage CSV rows are written every 5 seconds (trimmed to 1,000,000 lines). Network transitions are monitored every 10 seconds and recorded in `data/network.csv`, also trimmed to 1,000,000 entries.
 
 ## Project Structure
 - `index.html`: Main dashboard shell and modal markup.
@@ -145,10 +147,11 @@ package upgrades; declining or not answering within five minutes skips them.
 - `assets/light.css`: Light theme styling.
 - `scripts/write.js`: Front-end rendering, settings, and UI logic.
 - `scripts/read.js`: Telemetry reader, simulator fallback, API server.
-- Network status uses the Linux `iw` utility for Wi-Fi signal and link details.
+- Network status uses the Linux `iw` utility for Wi-Fi signal and link details. The backend checks for active non-internal IPv4 interfaces every 10 seconds and records detected disconnect/reconnect times and outage durations.
 - `data/settings.json`: User-configurable thresholds.
 - `data/status.json`: Live status payload consumed by the UI.
 - `data/log.csv`: Rolling telemetry log.
+- `data/network.csv`: Rolling network disconnect/reconnect log with outage durations.
 
 ## Function Reference
 
@@ -157,6 +160,8 @@ package upgrades; declining or not answering within five minutes skips them.
 - `countLogLines()`: Counts existing CSV data lines to enforce the max log size.
 - `trimLogIfNeeded()`: Trims the CSV log to the most recent `LOG_MAX_LINES`.
 - `maybeLog(telemetry)`: Appends a CSV line at the configured interval.
+- `recordNetworkState(stats)`: Records changes in active IPv4 connectivity and computes outage statistics.
+- `trimNetworkLogIfNeeded()`: Trims network transition history to the most recent `NETWORK_LOG_MAX_LINES`.
 - `loadSettings()`: Loads settings from disk with defaults fallback.
 - `computeDecision(telemetry, prev)`: Applies battery and source logic to decide `system_on` and `use_source`.
 - `writeStatus(telemetry, decision)`: Writes `data/status.json` with computed fields.
