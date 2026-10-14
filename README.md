@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.3.11**
+**Version: 1.3.12**
 
 ## Overview
 
@@ -22,7 +22,7 @@ computes power decisions, logs CSV data, and serves a lightweight API.
 - 1 Hz polling of `data/status.json` with interpolation for smooth transitions.
 - Status LEDs with voltage-range tooltips for source/battery/buck health.
 - Settings modal with persisted JSON writes (`data/settings.json`) via the local API server.
-- Logs modal with a live 2-minute voltage chart and CSV table.
+- Logs modal with a live 10-minute voltage chart showing recorded samples without smoothing and a CSV table.
 - Repository File Tree panel with tracked files and installed/generated file mappings.
 - Serial bridge with auto-reconnect and simulator fallback.
 - Power override (BATT/AUTO/SOURCE) switch synced to settings.
@@ -31,7 +31,7 @@ computes power decisions, logs CSV data, and serves a lightweight API.
 1. Flash the Arduino with the telemetry sketch and connect it to the Pi over USB serial.
 
    For source-voltage-only monitoring, upload `arduino/source_voltage_only.ino`
-   instead. It reads `A1` and sends only `source_voltage` once per second; the
+   instead. It reads `A1` and sends only `source_voltage` four times per second; the
    original `arduino/arduino.ino` remains the full telemetry and relay sketch.
 
 2. On the Raspberry Pi, install dependencies:
@@ -137,7 +137,7 @@ package upgrades; declining or not answering within five minutes skips them.
 - Rendering: a requestAnimationFrame loop interpolates toward the latest telemetry for smooth UI changes.
 - Turbine animation: spin rate derived from normalized battery voltage between `batt_empty_voltage` and `batt_full_voltage`.
 - Status indicators: LED state is computed from live voltage vs. expected ranges, with tooltips updated per poll.
-- Logging: voltage CSV rows are written every 5 seconds (trimmed to 1,000,000 lines). Network transitions are monitored every 10 seconds and recorded in `data/network.csv`, also trimmed to 1,000,000 entries.
+- Sampling and logging: the Arduino sends telemetry every 250 ms, and voltage CSV rows are written up to every 250 ms (trimmed to 1,000,000 lines). Network transitions are monitored every 10 seconds and recorded in `data/network.csv`, also trimmed to 1,000,000 entries.
 
 ## Project Structure
 - `index.html`: Main dashboard shell and modal markup.

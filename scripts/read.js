@@ -334,7 +334,7 @@ const SERIAL_BAUD = Number.parseInt(process.env.SERIAL_BAUD || "115200", 10);
 const HTTP_PORT = Number.parseInt(process.env.PORT || "8000", 10);
 const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER !== "0";
 
-const LOG_INTERVAL_MS = 5000;
+const LOG_INTERVAL_MS = 250;
 const LOG_MAX_LINES = 1000000;
 const NETWORK_LOG_MAX_LINES = LOG_MAX_LINES;
 const NETWORK_SAMPLE_INTERVAL_MS = 10000;
@@ -1400,7 +1400,7 @@ if (ENABLE_API_SERVER) {
 
         if (pathname === "/api/logs" && req.method === "GET") {
             const limit = Number.parseInt(requestUrl.searchParams.get("limit") || "120", 10);
-            const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(500, limit) : 120;
+            const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(2500, limit) : 120;
             const payload = readLastLogRows(safeLimit);
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ ok: true, ...payload }));

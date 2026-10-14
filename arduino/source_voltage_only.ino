@@ -9,7 +9,7 @@ const int ADC_SAMPLES = 8;
 // Keep these calibrated to the source voltage divider and Arduino 5 V rail.
 const float ADC_REFERENCE_V = 5.21;
 const float SOURCE_DIVIDER_RATIO = 3.13;
-const unsigned long SEND_INTERVAL_MS = 1000;
+const unsigned long SEND_INTERVAL_MS = 250;
 
 unsigned long lastSend = 0;
 

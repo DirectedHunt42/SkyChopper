@@ -82,13 +82,14 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.11";
+const APP_VERSION = "1.3.12";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
 const LOG_LEFT_HIDE_MS = 10000;
-const MAX_LOG_ROWS = 120;
-const LOG_CHART_ROWS = 120;
+const MAX_LOG_ROWS = 2500;
+const MAX_LOG_TABLE_ROWS = 120;
+const LOG_CHART_ROWS = 2400;
 const LOG_REFRESH_MS = 15000;
 const confirmSim = document.getElementById('confirm-sim');
 const confirmSimCancel = document.getElementById('confirm-sim-cancel');
@@ -443,21 +444,6 @@ function getLogCell(row, headerMap, key, fallbackIndex = -1) {
     return fallbackIndex >= 0 ? (row[fallbackIndex] ?? "") : "";
 }
 
-function smoothVoltageSeries(series) {
-    if (!series || series.length < 3) return series;
-    return series.map((point, index) => {
-        if (index === 0 || index === series.length - 1) return point;
-        const prev = series[index - 1];
-        const next = series[index + 1];
-        return {
-            ...point,
-            batt: Number.isFinite(point.batt) ? ((prev.batt + point.batt * 2 + next.batt) / 4) : point.batt,
-            source: Number.isFinite(point.source) ? ((prev.source + point.source * 2 + next.source) / 4) : point.source,
-            buck: Number.isFinite(point.buck) ? ((prev.buck + point.buck * 2 + next.buck) / 4) : point.buck
-        };
-    });
-}
-
 function updateSerialMonitorVisibility() {
     const isOpen = serialMonitorBackdrop?.classList.contains("open");
     if (serialMonitorBackdrop) {
@@ -810,21 +796,11 @@ function renderLogChart(rows) {
     })).filter((d) => Number.isFinite(d.t));
 
     const rowsToChart = parsed.slice(-LOG_CHART_ROWS).filter((d) => d.t >= displayNow - windowMs && d.t <= displayNow);
-    const smoothSlice = smoothVoltageSeries(rowsToChart);
-
-    const lastPoint = smoothSlice[smoothSlice.length - 1];
-    if (lastPoint && lastPoint.t < displayNow) {
-        smoothSlice.push({
-            t: displayNow,
-            batt: lastPoint.batt,
-            source: lastPoint.source,
-            buck: lastPoint.buck
-        });
-    }
+    const chartSlice = rowsToChart;
 
     let minV = Infinity;
     let maxV = -Infinity;
-    smoothSlice.forEach((d) => {
+    chartSlice.forEach((d) => {
         (document.body.classList.contains("source-only-mode") ? [d.source] : [d.batt, d.source, d.buck]).forEach((v) => {
             if (Number.isFinite(v)) {
                 minV = Math.min(minV, v);
@@ -875,7 +851,7 @@ function renderLogChart(rows) {
         ctx2d.lineTo(width - right, y);
         ctx2d.stroke();
         const value = yMax - (yMax - yMin) * t;
-        ctx2d.fillText(value.toFixed(2), left - 8, y);
+        ctx2d.fillText(value.toFixed(3), left - 8, y);
     }
 
     ctx2d.save();
@@ -927,8 +903,8 @@ function renderLogChart(rows) {
         ctx2d.stroke();
     }
 
-    const drawSmoothSeries = (key, color) => {
-        const points = smoothSlice
+    const drawSeries = (key, color) => {
+        const points = chartSlice
             .filter((d) => Number.isFinite(d[key]))
             .map((d) => ({ x: toX(d.t), y: toY(d[key]) }));
         if (!points.length) return;
@@ -940,22 +916,13 @@ function renderLogChart(rows) {
         ctx2d.beginPath();
         ctx2d.moveTo(points[0].x, points[0].y);
 
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            ctx2d.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-        }
-
-        if (points.length > 1) {
-            const last = points[points.length - 1];
-            ctx2d.lineTo(last.x, last.y);
-        }
+        for (let i = 1; i < points.length; i++) ctx2d.lineTo(points[i].x, points[i].y);
         ctx2d.stroke();
     };
 
-    if (!document.body.classList.contains("source-only-mode")) drawSmoothSeries("batt", palette.warn);
-    drawSmoothSeries("source", palette.accent);
-    if (!document.body.classList.contains("source-only-mode")) drawSmoothSeries("buck", palette.good);
+    if (!document.body.classList.contains("source-only-mode")) drawSeries("batt", palette.warn);
+    drawSeries("source", palette.accent);
+    if (!document.body.classList.contains("source-only-mode")) drawSeries("buck", palette.good);
 
     ctx2d.strokeStyle = palette.ink;
     ctx2d.lineWidth = 1.6;
@@ -990,7 +957,7 @@ async function loadLogTable() {
             ? (logTableWrap.scrollHeight - logTableWrap.scrollTop - logTableWrap.clientHeight) < 24
             : true;
 
-        renderLogTable(rows, logHeaderCache);
+        renderLogTable(rows.slice(-MAX_LOG_TABLE_ROWS), logHeaderCache);
         logRowsCache = rows;
         renderLogChart(rows);
 
@@ -1008,7 +975,7 @@ async function loadLogTable() {
             console.log('Log fetch error:', err.message);
         }
         // Preserve the last successful log view when the fetch fails.
-        renderLogTable(logRowsCache, logHeaderCache);
+        renderLogTable(logRowsCache.slice(-MAX_LOG_TABLE_ROWS), logHeaderCache);
         renderLogChart(logRowsCache);
 
         if (logLinesCount) {

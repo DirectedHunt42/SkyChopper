@@ -33,7 +33,7 @@ const unsigned long RELAY_SETTLE_MS = 200;
 const int ADC_SAMPLES = 8;
 
 unsigned long lastSend = 0;
-const unsigned long SEND_INTERVAL = 1000; // ms
+const unsigned long SEND_INTERVAL = 250; // ms
 
 // ===== UTILS =====
 // Measure Vcc using the internal 1.1V reference (AVR only).
