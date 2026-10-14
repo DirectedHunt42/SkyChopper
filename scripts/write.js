@@ -76,13 +76,15 @@ const inputForceSimulation = document.getElementById('setting-force-simulation')
 const inputSourceVoltageOnly = document.getElementById('setting-source-voltage-only');
 const logChart = document.getElementById('logChart');
 const logChartCtx = logChart ? logChart.getContext('2d') : null;
+const logChartTooltip = document.getElementById('log-chart-tooltip');
 let logRowsCache = [];
 let logHeaderCache = [];
+let logChartPoints = [];
 let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.12";
+const APP_VERSION = "1.3.13";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -766,6 +768,7 @@ function renderLogTable(rows, header = []) {
 
 function renderLogChart(rows) {
     if (!logChart || !logChartCtx) return;
+    logChartPoints = [];
     const chartTitle = document.querySelector(".log-chart-title");
     if (chartTitle) chartTitle.textContent = document.body.classList.contains("source-only-mode") ? "Source Voltage Trend" : "Voltage Trend";
     const ctx2d = logChartCtx;
@@ -906,7 +909,11 @@ function renderLogChart(rows) {
     const drawSeries = (key, color) => {
         const points = chartSlice
             .filter((d) => Number.isFinite(d[key]))
-            .map((d) => ({ x: toX(d.t), y: toY(d[key]) }));
+            .map((d) => {
+                const point = { x: toX(d.t), y: toY(d[key]), voltage: d[key], time: d.t, series: key };
+                logChartPoints.push(point);
+                return point;
+            });
         if (!points.length) return;
 
         ctx2d.strokeStyle = color;
@@ -930,6 +937,40 @@ function renderLogChart(rows) {
     ctx2d.moveTo(left, top);
     ctx2d.lineTo(left, top + plotH);
     ctx2d.stroke();
+}
+
+function updateLogChartTooltip(event) {
+    if (!logChart || !logChartTooltip || !logChartPoints.length) return;
+    const rect = logChart.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+    let nearest = null;
+    let nearestDistance = 14;
+
+    for (const point of logChartPoints) {
+        const distance = Math.hypot(point.x - pointerX, point.y - pointerY);
+        if (distance < nearestDistance) {
+            nearest = point;
+            nearestDistance = distance;
+        }
+    }
+
+    if (!nearest) {
+        logChartTooltip.classList.remove("visible");
+        logChartTooltip.setAttribute("aria-hidden", "true");
+        return;
+    }
+
+    const seriesNames = { batt: "Battery", source: "Source", buck: "Buck output" };
+    const wrapRect = logChart.parentElement.getBoundingClientRect();
+    const pointX = rect.left - wrapRect.left + nearest.x;
+    const pointY = rect.top - wrapRect.top + nearest.y;
+    logChartTooltip.textContent = `${seriesNames[nearest.series]}: ${nearest.voltage.toFixed(3)} V`;
+    logChartTooltip.style.left = `${pointX}px`;
+    logChartTooltip.style.top = `${pointY}px`;
+    logChartTooltip.classList.toggle("below", pointY < 44);
+    logChartTooltip.classList.add("visible");
+    logChartTooltip.setAttribute("aria-hidden", "false");
 }
 
 async function loadLogTable() {
@@ -1297,6 +1338,13 @@ function renderLoop() {
 }
 
 // Event listeners
+if (logChart) {
+    logChart.addEventListener("pointermove", updateLogChartTooltip);
+    logChart.addEventListener("pointerleave", () => {
+        logChartTooltip?.classList.remove("visible");
+        logChartTooltip?.setAttribute("aria-hidden", "true");
+    });
+}
 if (openSettings) openSettings.addEventListener("click", () => { fillSettingsForm(); openSettingsModal(); });
 if (openLogs) {
     openLogs.addEventListener("click", () => {
