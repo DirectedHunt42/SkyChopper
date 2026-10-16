@@ -9,7 +9,7 @@ const turbineLabel = document.getElementById('turbine-label');
 const openSettings = document.getElementById('open-settings');
 const openLogs = document.getElementById('open-logs');
 const rebootButton = document.getElementById('reboot-pi');
-const rebootStatus = document.getElementById('reboot-status');
+const actionMessage = document.getElementById('action-message');
 const downloadLog = document.getElementById('download-log');
 const clearLogs = document.getElementById('clear-logs');
 const settingsBackdrop = document.getElementById('settings-backdrop');
@@ -84,7 +84,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.16";
+const APP_VERSION = "1.3.17";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -1507,17 +1507,21 @@ if (rebootButton) {
     rebootButton.addEventListener("click", async () => {
         if (!window.confirm("Reboot the Raspberry Pi now? The dashboard will be unavailable briefly.")) return;
         rebootButton.disabled = true;
-        if (rebootStatus) {
-            rebootStatus.hidden = false;
-            rebootStatus.textContent = "Sending reboot command...";
+        if (actionMessage) {
+            actionMessage.hidden = false;
+            actionMessage.removeAttribute("title");
+            actionMessage.textContent = "Sending reboot command...";
         }
         try {
             const response = await fetch(`${API_BASE}/api/reboot`, { method: "POST" });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || "Reboot failed.");
-            if (rebootStatus) rebootStatus.textContent = "Rebooting Pi...";
+            if (actionMessage) actionMessage.textContent = "Rebooting Pi...";
         } catch (error) {
-            if (rebootStatus) rebootStatus.textContent = `Reboot failed: ${error.message}`;
+            if (actionMessage) {
+                actionMessage.textContent = "Reboot failed.";
+                actionMessage.title = error.message;
+            }
             rebootButton.disabled = false;
         }
     });
@@ -1816,6 +1820,12 @@ async function refreshUpdateStatus() {
         updateStatus.textContent = data.status;
         updateOutput.textContent = data.output || "No updater output yet.";
         updateOutput.scrollTop = updateOutput.scrollHeight;
+        if (actionMessage) {
+            actionMessage.hidden = false;
+            actionMessage.removeAttribute("title");
+            actionMessage.textContent = data.status;
+        }
+        if (updateRunning && !updatePollTimer) updatePollTimer = setInterval(refreshUpdateStatus, 2000);
         if (data.status.startsWith("APT upgrade available:") && !updateUpgradePromptShown) {
             updateUpgradePromptShown = true;
             const packageCount = data.status.match(/APT upgrade available: (\d+)/)?.[1] || "some";
@@ -1840,6 +1850,11 @@ async function refreshUpdateStatus() {
         }
     } catch (error) {
         updateStatus.textContent = "Waiting for SkyChopper to reconnect...";
+        if (actionMessage) {
+            actionMessage.hidden = false;
+            actionMessage.textContent = "Update status unavailable.";
+            actionMessage.title = error.message;
+        }
     }
 }
 
@@ -1900,14 +1915,7 @@ async function refreshNetworkStats() {
         setNetworkText("network-tx-rate", wifi.txRate);
         setNetworkText("system-primary-ip", data.primaryIp);
         setNetworkText("system-local-hostname", data.localHostname);
-        setNetworkText("network-default-interface", data.defaultInterface);
-        setNetworkText("network-default-gateway", data.defaultGateway);
         setNetworkText("network-traffic", data.networkTraffic);
-        const activeInterfaces = (data.interfaces || []).map((item) => {
-            const primary = item.name === data.defaultInterface ? " (default)" : "";
-            return `${item.name}: ${item.addresses.join(", ")}${primary}`;
-        }).join("\n");
-        setNetworkText("network-interfaces", activeInterfaces || "No active IPv4 interfaces");
         const monitoring = data.monitoring || {};
         setNetworkText("network-monitor-state", monitoring.connected ? "Connected (IPv4)" : "Disconnected");
         setNetworkText("network-disconnect-count", String(monitoring.disconnectCount ?? 0));
@@ -1927,15 +1935,15 @@ async function refreshNetworkStats() {
         document.querySelector(".ethernet-icon")?.classList.remove("active");
         setNetworkText("network-wifi-state", "Unavailable");
         ["network-ethernet-status", "network-ssid", "network-signal", "network-wifi-interface", "network-wifi-link",
-            "network-frequency", "network-tx-rate", "network-default-interface", "network-default-gateway",
-            "network-traffic", "system-primary-ip", "system-local-hostname"].forEach((id) => setNetworkText(id, "Unavailable"));
-        setNetworkText("network-interfaces", "Unavailable");
+            "network-frequency", "network-tx-rate", "network-traffic", "system-primary-ip",
+            "system-local-hostname"].forEach((id) => setNetworkText(id, "Unavailable"));
         setNetworkText("network-monitor-state", "Unavailable");
         setNetworkText("network-refreshed", `Network details unavailable: ${error.message}`);
     }
 }
 refreshNetworkStats();
 setInterval(refreshNetworkStats, 10000);
+if (window.location.protocol === "http:" || window.location.protocol === "https:") refreshUpdateStatus();
 
 document.getElementById("open-update")?.addEventListener("click", async () => {
     if (updateRunning) return;
@@ -1951,6 +1959,11 @@ document.getElementById("open-update")?.addEventListener("click", async () => {
     if (closeUpdateButton) closeUpdateButton.disabled = true;
     if (openUpdateButton) openUpdateButton.disabled = true;
     updateStatus.textContent = "Starting SkyChopper update...";
+    if (actionMessage) {
+        actionMessage.hidden = false;
+        actionMessage.removeAttribute("title");
+        actionMessage.textContent = "Starting SkyChopper update...";
+    }
     updateOutput.textContent = "";
     updateUpgradePromptShown = false;
     aptUpgradeDialog.hidden = true;
@@ -1965,6 +1978,10 @@ document.getElementById("open-update")?.addEventListener("click", async () => {
         if (closeUpdateButton) closeUpdateButton.disabled = false;
         if (openUpdateButton) openUpdateButton.disabled = false;
         updateStatus.textContent = `Update failed to start: ${error.message}`;
+        if (actionMessage) {
+            actionMessage.textContent = "Update failed to start.";
+            actionMessage.title = error.message;
+        }
     }
 });
 document.getElementById("apt-upgrade-cancel")?.addEventListener("click", () => respondToAptUpgrade(false));

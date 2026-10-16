@@ -42,15 +42,19 @@ body.update-open { overflow: hidden; }
 .eyebrow, .subtitle { color: var(--dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
 .eyebrow { margin: 0 0 6px; }
 #app-version { color: var(--blue); margin-left: 8px; }
-.hero-row { display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; gap: 16px; }
+.hero-row { display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; gap: 8px; }
 .hero-title { min-width: 0; }
 .hero-row h1 { color: var(--blue-soft); font-size: 1.7rem; letter-spacing: 2px; margin: 0; }
 .hero-actions { display: grid; justify-items: end; gap: 4px; max-width: 100%; }
 .header-action-buttons { display: grid; justify-items: end; gap: 4px; max-width: 100%; }
 .primary-action-buttons { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 7px; }
 .hero-actions > *, .header-action-buttons > * { max-width: 100%; }
-.primary-action-buttons .settings-btn { padding-inline: 8px; }
+.primary-action-buttons .settings-btn { padding-inline: 12px; }
 .subtitle { margin-top: 4px; font-size: 12px; letter-spacing: 0; text-transform: none; }
+
+@media (min-width: 1141px) {
+    .hero-actions { transform: translateY(2px); }
+}
 
 .settings-btn, .ghost-btn, .primary-btn, .danger-btn, .icon-btn,
 .dashboard-action {
@@ -75,24 +79,23 @@ body.update-open { overflow: hidden; }
 .update-btn { color: var(--blue-soft); }
 .reboot-btn { color: var(--red); border-color: #713743; }
 .reboot-btn:hover { background: #381923; border-color: var(--red); }
-.reboot-status { color: var(--amber); text-align: right; font-size: 10px; }
+#action-message { max-width: 589px; overflow: hidden; color: var(--amber); text-align: right; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .danger-btn { color: var(--red); border-color: #713743; }
 .danger-btn:hover { background: #381923; border-color: var(--red); }
 .primary-btn { color: #061522; background: var(--blue); border-color: var(--blue); }
 .primary-btn:hover { background: var(--blue-soft); }
 .wifi-button { text-transform: none; letter-spacing: 0; }
-.wifi-status-icon { width: 16px; height: 16px; }
+.wifi-status-icon { width: 34px; height: 28px; flex: 0 0 auto; overflow: visible; }
 .wifi-status-icon .wifi-segment { fill: none; stroke: #555; stroke-width: 3; stroke-linecap: round; }
 .wifi-status-icon circle.wifi-segment { fill: #555; stroke: none; }
 .wifi-status-icon .wifi-segment.active { stroke: var(--signal-color, #555); }
 .wifi-status-icon circle.wifi-segment.active { fill: var(--signal-color, #555); }
-.wifi-card .wifi-signal-display { margin: 4px 0 12px; }
-.wifi-card { aspect-ratio: auto; min-height: 420px; }
-.wifi-card .network-stats-grid { gap: 4px; }
-.wifi-card .network-stat { gap: 3px; padding: 5px; }
-.wifi-card .wifi-status-icon { width: 32px; height: 32px; }
-.wifi-card .network-state { font-size: 24px; }
-.wifi-card .wifi-signal-display > span { font-size: 22px; }
+.wifi-signal-display, .ethernet-status { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+.network-state { color: var(--blue-soft); font-size: 13px; font-weight: 600; }
+.network-state.signal-weak, .network-state.signal-fair,
+.network-state.signal-good, .network-state.signal-strong,
+.network-state.signal-none { color: var(--signal-color, var(--blue-soft)); }
+.network-signal-value { display: inline-flex; align-items: baseline; gap: 7px; }
 
 .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 18px; align-items: start; }
 .card, .panel {
@@ -113,7 +116,7 @@ body.update-open { overflow: hidden; }
     margin: 0 0 14px;
     color: var(--amber);
     font-size: .9rem;
-    letter-spacing: .08em;
+    letter-spacing: 1px;
     font-weight: 700;
     text-transform: uppercase;
     cursor: pointer;
@@ -121,8 +124,8 @@ body.update-open { overflow: hidden; }
 }
 .card h2:focus-visible { outline: 1px solid var(--blue); outline-offset: 4px; }
 .card h2 > :last-child:not(.panel-toggle) { margin-left: auto; }
-.panel-toggle { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 18px; height: 20px; padding: 0; color: var(--blue); background: transparent; border: 0; line-height: 0; cursor: pointer; }
-.panel-toggle::before { display: block; content: "\25B6"; font-size: 9px; line-height: 1; transform: rotate(90deg); transform-origin: center; transition: transform .2s ease; }
+.panel-toggle { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 10px; height: 16px; padding: 0; color: var(--blue); background: transparent; border: 0; font: inherit; letter-spacing: inherit; line-height: 0; cursor: pointer; }
+.panel-toggle::before { display: block; content: "\25B6"; font-size: .65rem; line-height: 1.5; transform: rotate(90deg); transform-origin: center; transition: transform .2s ease; }
 .card.collapsed > :not(h2) { display: none; }
 .card.collapsed { align-self: start; aspect-ratio: auto; min-height: 0; padding-bottom: 10px; }
 .card.collapsed h2 { margin-bottom: 0; }
@@ -140,7 +143,7 @@ body.update-open { overflow: hidden; }
 .metric strong { color: var(--blue-soft); font-weight: 600; }
 .metric-value { font-variant-numeric: tabular-nums; }
 .voltage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
-.voltage-tile { min-width: 0; padding: 12px; background: #151515; border: 1px solid #282828; border-radius: 6px; }
+.voltage-tile { min-width: 0; padding: 12px; background: #151515; border: 1px solid #282828; border-radius: 5px; }
 .voltage-tile .label { color: var(--dim); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
 .voltage-tile strong { display: block; margin-top: 8px; color: var(--blue-soft); font-size: clamp(14px, 1.35vw, 18px); line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .voltage-tile small { display: block; margin-top: 5px; color: var(--dim); font-size: 11px; }
@@ -166,7 +169,7 @@ body.update-open { overflow: hidden; }
 .status-item.on { color: var(--green); }
 .status-item.warn { color: var(--amber); }
 .status-item.danger { color: var(--red); }
-.bar { height: 7px; margin: 4px 0 11px; overflow: hidden; border-radius: 4px; background: #202020; }
+.bar { height: 7px; margin: 4px 0 12px; overflow: hidden; border-radius: 4px; background: #202020; }
 .bar-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2388c6, var(--blue)); transition: width .4s ease; }
 .bar-fill.warn { background: linear-gradient(90deg, #c38435, var(--amber)); }
 .bar-fill.fail { background: linear-gradient(90deg, #bc4f61, var(--red)); }
@@ -236,16 +239,15 @@ body.update-open { overflow: hidden; }
 .switch-btn.active { color: #051522; }
 .slider-pill { position: absolute; top: 3px; left: 3px; height: calc(100% - 6px); border-radius: 3px; background: var(--blue); transition: transform .2s ease, width .2s ease; }
 .network-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 14px; }
-.network-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
-.network-history-stats .network-stat { padding: 7px; }
-.network-history-stats .network-stat span { font-size: 9px; }
-.network-history-stats .network-stat strong { font-size: 10px; }
-.network-history { margin-top: 10px; padding: 9px; border: 1px solid var(--border); border-radius: 5px; background: #0b0b0b; }
+.network-history-panel { flex: 0 0 auto; margin-top: 10px; padding: 10px; border: 1px solid #292929; border-radius: 5px; background: #0d0d0d; }
+.network-section-heading { margin-bottom: 5px; color: var(--blue-soft); font-size: 10px; font-weight: 600; }
+.network-detail-list { display: flex; flex-direction: column; }
+.network-history { margin-top: 8px; }
 .network-history-heading { margin-bottom: 5px; color: var(--blue-soft); font-size: 10px; font-weight: 600; }
-#network-event-history { display: grid; gap: 4px; max-height: 100px; margin: 0; padding-left: 18px; overflow: auto; color: var(--dim); font-size: 9px; }
-.wifi-signal-display, .ethernet-status { display: flex; align-items: center; gap: 9px; margin: 8px 0; color: var(--blue-soft); }
-.ethernet-icon { width: 32px; height: 32px; opacity: .8; }
-.ethernet-icon:not(.active) { filter: grayscale(1); opacity: .55; }
+#network-event-history { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: var(--dim); font-size: 9px; }
+.ethernet-status { color: var(--dim); }
+.ethernet-icon { width: 34px; height: 28px; flex: 0 0 auto; filter: grayscale(1); opacity: .55; transition: filter .2s ease, opacity .2s ease; }
+.ethernet-icon.active { filter: none; opacity: 1; }
 .wifi-icon { width: 27px; height: 24px; }
 .wifi-icon path, .wifi-icon circle { fill: none; stroke: #42647b; stroke-width: 3; stroke-linecap: round; }
 .wifi-icon circle { fill: #42647b; stroke: none; }
@@ -284,11 +286,6 @@ body.update-open { overflow: hidden; }
 .document-content a { color: var(--blue); }
 .document-content img { max-width: 100%; height: auto; }
 .document-content pre { max-width: 100%; overflow: auto; padding: 10px; background: #020b12; }
-.network-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.network-stat { display: flex; flex-direction: column; gap: 4px; padding: 9px; background: #0b0b0b; border: 1px solid var(--border); border-radius: 5px; }
-.network-stat span { color: var(--dim); font-size: 10px; }
-.network-stat strong { color: var(--blue-soft); font-size: 11px; overflow-wrap: anywhere; }
-.network-stat-wide { grid-column: 1 / -1; }
 .log-chart { display: block; }
 .log-chart-header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .log-chart-title { color: var(--dim); font-size: 10px; text-transform: uppercase; }
@@ -382,7 +379,7 @@ body.update-open { overflow: hidden; }
 .dashboard-footer a { color: var(--blue); }
 .dashboard-footer #app-version { color: inherit; margin: 0; }
 
-@media (max-width: 1200px) {
+@media (max-width: 1140px) {
     .hero-row { grid-template-columns: minmax(0, 1fr); align-items: start; }
     .hero-actions, .header-action-buttons { justify-items: end; }
 }
@@ -390,6 +387,7 @@ body.update-open { overflow: hidden; }
     .hero-row h1 { font-size: 1.25rem; }
     .hero-actions, .header-action-buttons { justify-items: start; }
     .primary-action-buttons { justify-content: flex-start; }
+    #action-message { text-align: left; }
 }
 @media (max-width: 600px) {
     .modal-backdrop { padding: 10px; }
@@ -412,13 +410,10 @@ body.update-open { overflow: hidden; }
     .apt-upgrade-actions button { flex: 1; justify-content: center; }
 }
 @media (max-width: 450px) {
-    .network-stats-grid { grid-template-columns: 1fr; }
-    .network-stat-wide { grid-column: auto; }
     .download-file-item { align-items: flex-start; }
     .download-file-button { padding: 6px; }
     .download-file-button span { display: none; }
     .chart-card { min-height: 360px; }
-    .telemetry-card { aspect-ratio: auto; }
     .voltage-grid { grid-template-columns: 1fr; }
     .voltage-tile { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .voltage-tile.full-telemetry { display: flex; }
