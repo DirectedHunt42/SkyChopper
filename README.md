@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.3.17**
+**Version: 1.3.18**
 
 ## Overview
 
@@ -34,10 +34,11 @@ computes power decisions, logs CSV data, and serves a lightweight API.
    instead. It reads `A1` and sends only `source_voltage` four times per second; the
    original `arduino/arduino.ino` remains the full telemetry and relay sketch.
 
-2. On the Raspberry Pi, install dependencies:
+2. On the Raspberry Pi, install the locked production dependencies from
+   `package.json` and `package-lock.json`:
 
-```powershell
-npm install
+```bash
+npm ci --omit=dev
 ```
 
 3. Run the backend on the Pi (telemetry + logging + API):
@@ -53,7 +54,8 @@ node scripts/read.js
 
 5. Optional: auto-restart the backend on changes:
 
-```powershell
+```bash
+npm ci
 npm run read:watch
 ```
 
@@ -143,8 +145,8 @@ package upgrades; declining or not answering within five minutes skips them.
 - `index.html`: Main dashboard shell and modal markup.
 - `arduino/arduino.ino`: Full telemetry and relay firmware (kept unchanged).
 - `arduino/source_voltage_only.ino`: Source voltage monitor firmware.
-- `assets/dark.css`: Dark theme styling.
-- `assets/light.css`: Light theme styling.
+- `assets/rtk-dashboard.css`: Dashboard styling and color theme.
+- `assets/favicon.svg`: Dashboard favicon.
 - `scripts/write.js`: Front-end rendering, settings, and UI logic.
 - `scripts/read.js`: Telemetry reader, simulator fallback, API server.
 - Network status uses the Linux `iw` utility for Wi-Fi signal and link details. The backend checks for active non-internal IPv4 interfaces every 10 seconds and records detected disconnect/reconnect times and outage durations.
