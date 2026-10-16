@@ -84,7 +84,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.14";
+const APP_VERSION = "1.3.15";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -828,8 +828,8 @@ function renderLogChart(rows) {
 
     const range = maxV - minV;
     const pad = range * 0.12;
-    const yMin = Math.max(1, minV - pad);
-    const yMax = Math.max(maxV + pad, yMin + 0.5);
+    const yMin = 0;
+    const yMax = Math.max(maxV + pad, 1);
 
     const left = 62;
     const right = 16;
