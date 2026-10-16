@@ -84,7 +84,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.15";
+const APP_VERSION = "1.3.16";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -905,6 +905,24 @@ function renderLogChart(rows) {
         ctx2d.lineTo(width - right, zeroY);
         ctx2d.stroke();
     }
+
+    const noiseFloorY = toY(0.25);
+    ctx2d.save();
+    ctx2d.globalAlpha = 0.65;
+    ctx2d.strokeStyle = palette.muted;
+    ctx2d.lineWidth = 1;
+    ctx2d.setLineDash([5, 4]);
+    ctx2d.beginPath();
+    ctx2d.moveTo(left, noiseFloorY);
+    ctx2d.lineTo(width - right, noiseFloorY);
+    ctx2d.stroke();
+    ctx2d.setLineDash([]);
+    ctx2d.fillStyle = palette.muted;
+    ctx2d.font = "9px 'JetBrains Mono', ui-monospace, monospace";
+    ctx2d.textAlign = "right";
+    ctx2d.textBaseline = "bottom";
+    ctx2d.fillText("0.25 V noise floor", width - right - 4, noiseFloorY - 3);
+    ctx2d.restore();
 
     const drawSeries = (key, color) => {
         const points = chartSlice

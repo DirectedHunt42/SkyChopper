@@ -90,8 +90,9 @@ body.update-open { overflow: hidden; }
 .wifi-card { aspect-ratio: auto; min-height: 420px; }
 .wifi-card .network-stats-grid { gap: 4px; }
 .wifi-card .network-stat { gap: 3px; padding: 5px; }
-.wifi-card .network-state { font-size: 12px; }
-.wifi-card .wifi-signal-display > span { font-size: 11px; }
+.wifi-card .wifi-status-icon { width: 32px; height: 32px; }
+.wifi-card .network-state { font-size: 24px; }
+.wifi-card .wifi-signal-display > span { font-size: 22px; }
 
 .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 18px; align-items: start; }
 .card, .panel {
@@ -243,7 +244,7 @@ body.update-open { overflow: hidden; }
 .network-history-heading { margin-bottom: 5px; color: var(--blue-soft); font-size: 10px; font-weight: 600; }
 #network-event-history { display: grid; gap: 4px; max-height: 100px; margin: 0; padding-left: 18px; overflow: auto; color: var(--dim); font-size: 9px; }
 .wifi-signal-display, .ethernet-status { display: flex; align-items: center; gap: 9px; margin: 8px 0; color: var(--blue-soft); }
-.ethernet-icon { width: 16px; height: 16px; opacity: .8; }
+.ethernet-icon { width: 32px; height: 32px; opacity: .8; }
 .ethernet-icon:not(.active) { filter: grayscale(1); opacity: .55; }
 .wifi-icon { width: 27px; height: 24px; }
 .wifi-icon path, .wifi-icon circle { fill: none; stroke: #42647b; stroke-width: 3; stroke-linecap: round; }
