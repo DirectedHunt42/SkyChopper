@@ -5,7 +5,7 @@
     --bg: #05080b;
     --card: #111111;
     --panel: #171717;
-    --border: #252525;
+    --border: #293b49;
     --blue: #57b6ef;
     --blue-soft: #9ad9ff;
     --amber: #ffbd69;
@@ -102,7 +102,7 @@ body.update-open { overflow: hidden; }
     min-width: 0;
     padding: 18px;
     background: var(--card);
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: 10px;
     overflow: auto;
 }
@@ -143,7 +143,7 @@ body.update-open { overflow: hidden; }
 .metric strong { color: var(--blue-soft); font-weight: 600; }
 .metric-value { font-variant-numeric: tabular-nums; }
 .voltage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
-.voltage-tile { min-width: 0; padding: 12px; background: #151515; border: 1px solid #282828; border-radius: 5px; }
+.voltage-tile { min-width: 0; padding: 12px; background: #151515; border: 0; border-radius: 5px; }
 .voltage-tile .label { color: var(--dim); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
 .voltage-tile strong { display: block; margin-top: 8px; color: var(--blue-soft); font-size: clamp(14px, 1.35vw, 18px); line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .voltage-tile small { display: block; margin-top: 5px; color: var(--dim); font-size: 11px; }
@@ -191,7 +191,7 @@ body.update-open { overflow: hidden; }
     margin: 0;
     padding: 10px;
     overflow: auto;
-    border: 1px solid #292929;
+    border: 0;
     border-radius: 5px;
     background: #0d0d0d;
     color: #9bc0da;
@@ -200,7 +200,7 @@ body.update-open { overflow: hidden; }
     overflow-wrap: anywhere;
 }
 .reader-output .log-line { display: block; }
-.log-table-wrap { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 5px; }
+.log-table-wrap { max-height: 320px; overflow: auto; border: 0; border-radius: 5px; }
 .log-table { width: 100%; border-collapse: collapse; font-size: 10px; }
 .log-table th, .log-table td { padding: 7px 9px; border-bottom: 1px solid #242424; text-align: left; white-space: nowrap; }
 .log-table th { position: sticky; top: 0; z-index: 1; color: var(--amber); background: #171717; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
@@ -221,7 +221,7 @@ body.update-open { overflow: hidden; }
     padding: 10px;
     color: var(--text);
     background: #080c0a;
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: 5px;
     font-size: 10px;
     line-height: 1.5;
@@ -239,7 +239,7 @@ body.update-open { overflow: hidden; }
 .switch-btn.active { color: #051522; }
 .slider-pill { position: absolute; top: 3px; left: 3px; height: calc(100% - 6px); border-radius: 3px; background: var(--blue); transition: transform .2s ease, width .2s ease; }
 .network-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 14px; }
-.network-history-panel { flex: 0 0 auto; margin-top: 10px; padding: 10px; border: 1px solid #292929; border-radius: 5px; background: #0d0d0d; }
+.network-history-panel { flex: 0 0 auto; margin-top: 10px; padding: 10px; border: 0; border-radius: 5px; background: #0d0d0d; }
 .network-section-heading { margin-bottom: 5px; color: var(--blue-soft); font-size: 10px; font-weight: 600; }
 .network-detail-list { display: flex; flex-direction: column; }
 .network-history { margin-top: 8px; }
@@ -259,7 +259,7 @@ body.update-open { overflow: hidden; }
 .signal-none { --signal-color: var(--dim); color: var(--dim) !important; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 999; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .82); }
 .modal-backdrop.open { display: flex; }
-.modal { display: flex; flex-direction: column; gap: 14px; width: min(720px, 95vw); max-height: min(86vh, 900px); padding: 18px; overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 18px 70px #000a; }
+.modal { display: flex; flex-direction: column; gap: 14px; width: min(720px, 95vw); max-height: min(86vh, 900px); padding: 18px; overflow: auto; background: var(--card); border: 0; border-radius: 10px; box-shadow: 0 18px 70px #000a; }
 .modal.files-modal { width: min(720px, 95vw); }
 .modal.document-modal { width: min(960px, 95vw); max-height: min(90vh, 1000px); overflow: hidden; }
 .modal.files-modal, .modal.document-modal { gap: 0; }
@@ -272,7 +272,7 @@ body.update-open { overflow: hidden; }
 .download-file-details { display: grid; min-width: 0; gap: 2px; }
 .download-file-details strong { color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
 .download-file-details span { color: var(--dim); font-size: 11px; overflow-wrap: anywhere; }
-.download-file-button { flex: 0 0 auto; padding: 6px 9px; font-size: 11px; }
+.download-file-button { flex: 0 0 auto; gap: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.65; }
 .download-file-button img { width: 16px; height: 16px; }
 .files-modal .modal-actions { margin-top: 8px; }
 .modal-backdrop.update-backdrop { padding: 0; background: var(--bg); }
@@ -288,7 +288,7 @@ body.update-open { overflow: hidden; }
 .field input { width: 100%; padding: 8px; color: var(--text); background: #0b0b0b; border: 1px solid var(--border); border-radius: 4px; }
 .checkbox-field input { justify-self: end; width: 18px; height: 18px; accent-color: var(--blue); }
 .modal-actions { justify-content: flex-end; }
-.document-content { flex: 1; min-height: 0; max-height: none; padding: 16px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: #0b0b0b; color: var(--text); font: 12px/1.65 "JetBrains Mono", Consolas, monospace; overflow-wrap: anywhere; }
+.document-content { flex: 1; min-height: 0; max-height: none; padding: 16px; overflow: auto; border: 0; border-radius: 6px; background: #0b0b0b; color: var(--text); font: 12px/1.65 "JetBrains Mono", Consolas, monospace; overflow-wrap: anywhere; }
 .document-content h1, .document-content h2, .document-content h3 { color: var(--blue-soft); margin: 1em 0 .55em; }
 .document-content a { color: var(--blue); }
 .document-content img { max-width: 100%; height: auto; }
