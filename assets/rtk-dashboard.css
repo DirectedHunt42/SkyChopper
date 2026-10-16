@@ -260,14 +260,21 @@ body.update-open { overflow: hidden; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 999; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .82); }
 .modal-backdrop.open { display: flex; }
 .modal { display: flex; flex-direction: column; gap: 14px; width: min(720px, 95vw); max-height: min(86vh, 900px); padding: 18px; overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 18px 70px #000a; }
-.modal.files-modal { width: min(820px, 95vw); }
-.download-file-list { max-height: 230px; overflow: auto; padding: 0 8px; border: 1px solid var(--border); border-radius: 5px; background: #0b0b0b; }
-.download-file-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #242424; }
+.modal.files-modal { width: min(720px, 95vw); }
+.modal.document-modal { width: min(960px, 95vw); max-height: min(90vh, 1000px); overflow: hidden; }
+.modal.files-modal, .modal.document-modal { gap: 0; }
+.modal-close-btn { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 5px; background: #0b0b0b; color: var(--text); font: inherit; font-size: 1.2rem; line-height: 1; padding: 5px 9px; cursor: pointer; }
+.modal-close-btn:hover { border-color: var(--blue); color: var(--blue-soft); }
+.modal-intro { margin: 4px 0 12px; color: var(--dim); font-size: 11px; }
+.download-file-list { flex: 1; min-height: 0; max-height: none; overflow: auto; padding-right: 4px; }
+.download-file-list .file-category { margin: 12px 0 6px; color: var(--amber); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+.download-file-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 2px; border-top: 1px solid var(--border); }
 .download-file-details { display: grid; min-width: 0; gap: 2px; }
-.download-file-details strong { color: var(--text); font-size: 10px; overflow-wrap: anywhere; }
-.download-file-details span { color: var(--dim); font-size: 9px; overflow-wrap: anywhere; }
-.download-file-button { flex: 0 0 auto; padding: 6px 9px; font-size: 9px; }
-.download-file-button img { width: 14px; height: 14px; }
+.download-file-details strong { color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.download-file-details span { color: var(--dim); font-size: 11px; overflow-wrap: anywhere; }
+.download-file-button { flex: 0 0 auto; padding: 6px 9px; font-size: 11px; }
+.download-file-button img { width: 16px; height: 16px; }
+.files-modal .modal-actions { margin-top: 8px; }
 .modal-backdrop.update-backdrop { padding: 0; background: var(--bg); }
 .modal.update-modal { width: 100%; height: 100%; max-height: none; padding: 22px; border: 0; border-radius: 0; box-shadow: none; }
 .update-modal .update-output { flex: 1; min-height: 0; max-height: none; }
@@ -281,7 +288,7 @@ body.update-open { overflow: hidden; }
 .field input { width: 100%; padding: 8px; color: var(--text); background: #0b0b0b; border: 1px solid var(--border); border-radius: 4px; }
 .checkbox-field input { justify-self: end; width: 18px; height: 18px; accent-color: var(--blue); }
 .modal-actions { justify-content: flex-end; }
-.document-content { max-height: min(70vh, 720px); padding: 14px; overflow: auto; border-radius: 6px; background: #0b0b0b; color: var(--text); font: 13px/1.65 "JetBrains Mono", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.document-content { flex: 1; min-height: 0; max-height: none; padding: 16px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: #0b0b0b; color: var(--text); font: 12px/1.65 "JetBrains Mono", Consolas, monospace; overflow-wrap: anywhere; }
 .document-content h1, .document-content h2, .document-content h3 { color: var(--blue-soft); margin: 1em 0 .55em; }
 .document-content a { color: var(--blue); }
 .document-content img { max-width: 100%; height: auto; }
@@ -392,6 +399,8 @@ body.update-open { overflow: hidden; }
 @media (max-width: 600px) {
     .modal-backdrop { padding: 10px; }
     .modal:not(.update-modal) { padding: 14px; }
+    .modal.files-modal { max-height: 92vh; }
+    .modal.document-modal { max-height: 92vh; }
     .voltage-grid { gap: 6px; }
     .voltage-tile { padding: 9px; }
     .voltage-tile strong { font-size: clamp(19px, 7vw, 27px); }

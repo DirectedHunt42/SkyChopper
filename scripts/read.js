@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const os = require("os");
+const readline = require("readline");
 const { execFile } = require("child_process");
 
 const READER_LOG_MAX_ENTRIES = 300;
@@ -22,10 +23,67 @@ const logFile = path.join(__dirname, "../data/log.csv");
 const networkLogFile = path.join(__dirname, "../data/network.csv");
 const dataFolder = path.join(__dirname, "../data");
 const repoRoot = path.resolve(__dirname, "..");
+const updateLogFile = "/var/log/skychopper-update.log";
 const LOG_HEADER = "time_iso,batt_voltage,source_voltage,buck_voltage,relay_mode";
 const NETWORK_LOG_HEADER = "time_iso,event,duration_seconds";
 const SERIAL_MONITOR_MAX_ENTRIES = 500;
 const DOWNLOADABLE_DATA_EXTENSIONS = new Set([".csv", ".log", ".json", ".conf", ".ini", ".yaml", ".yml", ".toml"]);
+const DOWNLOADABLE_LOG_FILES = [
+    {
+        id: "skychopper-service-log",
+        name: "Dashboard service log",
+        description: "Recent SkyChopper reader service output",
+        filename: "skychopper-service.log",
+        journal: true
+    },
+    {
+        id: "nginx-error-log",
+        name: "Nginx error log",
+        description: "Last 1,000 Nginx error log lines",
+        filename: "nginx-error.log",
+        path: "/var/log/nginx/error.log",
+        maxLines: 1000
+    },
+    {
+        id: "nginx-access-log",
+        name: "Nginx access log",
+        description: "Last 1,000 Nginx access log lines",
+        filename: "nginx-access.log",
+        path: "/var/log/nginx/access.log",
+        maxLines: 1000
+    },
+    {
+        id: "skychopper-update.log",
+        name: "Update log",
+        description: "Recent update and setup output",
+        filename: "skychopper-update.log",
+        path: updateLogFile,
+        maxLines: 1000
+    }
+];
+const DOWNLOADABLE_CONFIG_FILES = [
+    {
+        id: "installed-skychopper-service",
+        name: "SkyChopper systemd service",
+        description: "Installed dashboard service configuration",
+        filename: "skychopper.service",
+        path: "/etc/systemd/system/skychopper.service"
+    },
+    {
+        id: "installed-skychopper-nginx-site",
+        name: "SkyChopper Nginx site",
+        description: "Installed web server site configuration",
+        filename: "skychopper",
+        path: "/etc/nginx/sites-available/skychopper"
+    },
+    {
+        id: "installed-skychopper-update-source",
+        name: "SkyChopper update source",
+        description: "Installed repository path used by the updater",
+        filename: "skychopper-update-repo",
+        path: "/etc/skychopper-update-repo"
+    }
+];
 const REPO_ASSOCIATIONS = [
     { source: "index.html", target: path.join(repoRoot, "index.html") },
     { source: "assets/", target: path.join(repoRoot, "assets") },
@@ -621,7 +679,7 @@ function sampleNetworkStats() {
 
 function listDownloadableFiles() {
     ensureDataFolder();
-    return fs.readdirSync(dataFolder, { withFileTypes: true })
+    const files = fs.readdirSync(dataFolder, { withFileTypes: true })
         .filter((entry) => entry.isFile() && DOWNLOADABLE_DATA_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
         .map((entry) => {
             const extension = path.extname(entry.name).toLowerCase();
@@ -644,14 +702,119 @@ function listDownloadableFiles() {
                 filename: entry.name,
                 size: fs.statSync(path.join(dataFolder, entry.name)).size
             };
-        })
-        .sort((left, right) => left.category.localeCompare(right.category) || left.filename.localeCompare(right.filename));
+        });
+    for (const configFile of DOWNLOADABLE_CONFIG_FILES) {
+        if (!fs.existsSync(configFile.path) || !fs.statSync(configFile.path).isFile()) continue;
+        files.push({
+            id: configFile.id,
+            name: configFile.name,
+            category: "Configuration",
+            description: configFile.description,
+            filename: configFile.filename,
+            size: fs.statSync(configFile.path).size
+        });
+    }
+    for (const logFile of DOWNLOADABLE_LOG_FILES) {
+        if (logFile.journal) {
+            if (!fs.existsSync("/run/systemd/system")) continue;
+            files.push({
+                id: logFile.id,
+                name: logFile.name,
+                category: "Logs",
+                description: "Last 1,000 dashboard service journal lines",
+                filename: logFile.filename,
+                size: "unknown"
+            });
+            continue;
+        }
+        if (!fs.existsSync(logFile.path) || !fs.statSync(logFile.path).isFile()) continue;
+        files.push({
+            id: logFile.id,
+            name: logFile.name,
+            category: "Logs",
+            description: logFile.description,
+            filename: logFile.filename,
+            size: fs.statSync(logFile.path).size
+        });
+    }
+    const categoryOrder = new Map([["Logs", 0], ["Configuration", 1], ["Runtime data", 2]]);
+    const logOrder = new Map([
+        ["skychopper-service-log", 0],
+        ["nginx-error-log", 1],
+        ["nginx-access-log", 2],
+        ["skychopper-update.log", 3],
+        ["log.csv", 4],
+        ["network.csv", 5]
+    ]);
+    return files.sort((left, right) =>
+        (categoryOrder.get(left.category) ?? Number.MAX_SAFE_INTEGER) -
+        (categoryOrder.get(right.category) ?? Number.MAX_SAFE_INTEGER) ||
+        (logOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+        (logOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER) ||
+        left.filename.localeCompare(right.filename)
+    );
+}
+
+function readLastLines(filePath, maxLines) {
+    return new Promise((resolve, reject) => {
+        const lines = [];
+        let nextIndex = 0;
+        const input = fs.createReadStream(filePath);
+        const reader = readline.createInterface({ input, crlfDelay: Infinity });
+        reader.on("line", (line) => {
+            if (lines.length < maxLines) {
+                lines.push(line);
+            } else {
+                lines[nextIndex] = line;
+                nextIndex = (nextIndex + 1) % maxLines;
+            }
+        });
+        reader.once("close", () => {
+            const orderedLines = lines.length < maxLines
+                ? lines
+                : lines.slice(nextIndex).concat(lines.slice(0, nextIndex));
+            resolve(Buffer.from(orderedLines.length ? `${orderedLines.join("\n")}\n` : ""));
+        });
+        reader.once("error", reject);
+        input.once("error", reject);
+    });
+}
+
+function readDashboardJournal() {
+    return new Promise((resolve, reject) => {
+        execFile("journalctl", ["--unit=skychopper.service", "--no-pager", "--lines=1000", "--output=short-iso"], {
+            encoding: "utf8",
+            timeout: 5000,
+            maxBuffer: 8 * 1024 * 1024
+        }, (error, stdout) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve(Buffer.from(stdout));
+        });
+    });
 }
 
 function getDownloadableFile(id) {
     if (typeof id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) return null;
     const item = listDownloadableFiles().find((file) => file.id === id);
     if (!item) return null;
+
+    const logFile = DOWNLOADABLE_LOG_FILES.find((file) => file.id === id);
+    if (logFile) {
+        if (logFile.journal) return { ...item, source: "journal" };
+        const resolvedPath = fs.realpathSync(logFile.path);
+        if (!fs.statSync(resolvedPath).isFile()) return null;
+        return { ...item, path: resolvedPath, maxLines: logFile.maxLines };
+    }
+
+    const configFile = DOWNLOADABLE_CONFIG_FILES.find((file) => file.id === id);
+    if (configFile) {
+        const resolvedPath = fs.realpathSync(configFile.path);
+        if (!fs.statSync(resolvedPath).isFile()) return null;
+        return { ...item, path: resolvedPath };
+    }
 
     const dataRoot = fs.realpathSync(dataFolder);
     const resolvedPath = fs.realpathSync(path.join(dataRoot, item.filename));
@@ -1162,7 +1325,7 @@ if (ENABLE_API_SERVER) {
     sampleNetwork();
     setInterval(sampleNetwork, NETWORK_SAMPLE_INTERVAL_MS);
 
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
         const requestUrl = new URL(req.url || "/", `http://localhost:${HTTP_PORT}`);
         const pathname = requestUrl.pathname || "/";
         const origin = req.headers.origin || "*";
@@ -1239,7 +1402,11 @@ if (ENABLE_API_SERVER) {
                     res.end(JSON.stringify({ ok: false, error: "Unknown or unavailable file" }));
                     return;
                 }
-                const contents = fs.readFileSync(file.path);
+                const contents = file.source === "journal"
+                    ? await readDashboardJournal()
+                    : file.maxLines
+                        ? await readLastLines(file.path, file.maxLines)
+                        : fs.readFileSync(file.path);
                 res.writeHead(200, {
                     "Content-Type": "application/octet-stream",
                     "Content-Disposition": `attachment; filename="${file.filename}"`,

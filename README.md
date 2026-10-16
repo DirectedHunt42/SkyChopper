@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.3.18**
+**Version: 1.3.19**
 
 ## Overview
 
@@ -23,6 +23,7 @@ computes power decisions, logs CSV data, and serves a lightweight API.
 - Status LEDs with voltage-range tooltips for source/battery/buck health.
 - Settings modal with persisted JSON writes (`data/settings.json`) via the local API server.
 - Logs modal with a live 10-minute voltage chart showing recorded samples without smoothing and a CSV table.
+- Files modal with telemetry/network history, recent service/Nginx/update logs, and available runtime/service configuration downloads.
 - Repository File Tree panel with tracked files and installed/generated file mappings.
 - Serial bridge with auto-reconnect and simulator fallback.
 - Power override (BATT/AUTO/SOURCE) switch synced to settings.
@@ -118,8 +119,8 @@ All endpoints are served from `http://localhost:8000` by default.
 - `POST /api/reset-all`: Delete all data files and recreate defaults.
 - `POST /api/clear-logs`: Truncate `data/log.csv` to just the header.
 - `GET /api/network`: Read hostname, active IPv4 interfaces, default route, Wi-Fi connection details, and outage history.
-- `GET /api/files`: List downloadable logs and runtime configuration files.
-- `GET /api/files/:id`: Download a listed log or runtime configuration file.
+- `GET /api/files`: List telemetry and network history, recent dashboard/Nginx/update logs, and available runtime/service configuration files.
+- `GET /api/files/:id`: Download one of the listed logs or configuration files. Service and Nginx logs are limited to their latest 1,000 lines.
 - `GET /api/repo-files`: List repository files and report installed/generated file mappings.
 - `GET /api/update` and `POST /api/update`: Read update progress and start the installed updater.
 

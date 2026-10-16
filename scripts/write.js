@@ -10,7 +10,6 @@ const openSettings = document.getElementById('open-settings');
 const openLogs = document.getElementById('open-logs');
 const rebootButton = document.getElementById('reboot-pi');
 const actionMessage = document.getElementById('action-message');
-const downloadLog = document.getElementById('download-log');
 const clearLogs = document.getElementById('clear-logs');
 const settingsBackdrop = document.getElementById('settings-backdrop');
 const statusBuck = document.getElementById('status-buck');
@@ -22,9 +21,6 @@ const logsBackdrop = document.getElementById('logs-backdrop');
 const closeLogs = document.getElementById('close-logs');
 const serialMonitorBackdrop = document.getElementById('serial-monitor-backdrop');
 const closeSerialMonitor = document.getElementById('close-serial-monitor');
-const logTableWrap = document.getElementById('log-table-wrap');
-const logTableBody = document.getElementById('log-table-body');
-const logTableHead = document.querySelector('#log-table thead tr');
 const downloadFileList = document.getElementById('download-file-list');
 const downloadFileStatus = document.getElementById('download-file-status');
 const logLinesCount = document.getElementById('log-lines-count');
@@ -32,7 +28,6 @@ const serialMonitorPanel = document.getElementById('serial-monitor-panel');
 const toggleSerialMonitorBtn = document.getElementById('toggle-serial-monitor');
 const serialMonitorFeed = document.getElementById('serial-monitor-feed');
 const refreshLogBtn = document.getElementById('refresh-log');
-const refreshLogModalBtn = document.getElementById('refresh-log-modal');
 const recentLogBody = document.getElementById('recent-log-body');
 const readerLog = document.getElementById('reader-log');
 const refreshSerialBtn = document.getElementById('refresh-serial');
@@ -55,6 +50,7 @@ let updateRunning = false;
 let updateAutoCloseTimer = null;
 let updateUpgradePromptShown = false;
 let documentRequestId = 0;
+let pageScrollLock = null;
 const networkState = document.getElementById('network-wifi-state');
 let logAutoRefreshTimer = null;
 let serialMonitorTimer = null;
@@ -84,13 +80,12 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.18";
+const APP_VERSION = "1.3.19";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
 const LOG_LEFT_HIDE_MS = 10000;
 const MAX_LOG_ROWS = 2500;
-const MAX_LOG_TABLE_ROWS = 120;
 const LOG_CHART_ROWS = 2400;
 const LOG_REFRESH_MS = 15000;
 const confirmSim = document.getElementById('confirm-sim');
@@ -400,14 +395,33 @@ function closeSettingsModal() {
     settingsBackdrop.setAttribute("aria-hidden", "true");
 }
 
+function lockPageScroll() {
+    if (pageScrollLock) return;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const bodyPaddingRight = Number.parseFloat(getComputedStyle(document.body).paddingRight) || 0;
+    pageScrollLock = {
+        overflow: document.body.style.overflow,
+        paddingRight: document.body.style.paddingRight
+    };
+    document.body.style.paddingRight = `${bodyPaddingRight + scrollbarWidth}px`;
+    document.body.style.overflow = "hidden";
+}
+
+function unlockPageScroll() {
+    if (!pageScrollLock) return;
+    document.body.style.overflow = pageScrollLock.overflow;
+    document.body.style.paddingRight = pageScrollLock.paddingRight;
+    pageScrollLock = null;
+}
+
 function openLogsModal() {
     if (!logsBackdrop) return;
+    if (!logsBackdrop.classList.contains("open")) lockPageScroll();
     logsBackdrop.classList.add("open");
     logsBackdrop.setAttribute("aria-hidden", "false");
-    loadLogTable();
+    closeLogs?.focus();
     loadDownloadFiles();
     if (!logAutoRefreshTimer) logAutoRefreshTimer = setInterval(() => {
-        loadLogTable();
         loadDownloadFiles();
     }, LOG_REFRESH_MS);
 }
@@ -416,6 +430,7 @@ function closeLogsModal() {
     if (!logsBackdrop) return;
     logsBackdrop.classList.remove("open");
     logsBackdrop.setAttribute("aria-hidden", "true");
+    unlockPageScroll();
     if (logAutoRefreshTimer) {
         clearInterval(logAutoRefreshTimer);
         logAutoRefreshTimer = null;
@@ -698,72 +713,30 @@ async function downloadDataFile(file, button) {
     }
 }
 
-function renderLogTable(rows, header = []) {
-    if (!logTableBody) return;
+function renderRecentLogPreview(rows, header = []) {
+    if (!recentLogBody) return;
     const sourceOnly = document.body.classList.contains("source-only-mode");
-    if (logTableHead) {
-        logTableHead.innerHTML = "";
-        (sourceOnly ? ["Time (ISO)", "Source (V)"] : ["Time (ISO)", "Battery (V)", "Source (V)", "Buck (V)", "Relay Mode"])
-            .forEach((label) => {
-                const th = document.createElement("th");
-                th.textContent = label;
-                logTableHead.appendChild(th);
-            });
-    }
-    logTableBody.innerHTML = "";
     const headerMap = new Map(header.map((name, index) => [name, index]));
-    if (!rows.length) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = sourceOnly ? 2 : 5;
-        td.textContent = "No log data yet.";
-        tr.appendChild(td);
-        logTableBody.appendChild(tr);
-        return;
+    const recentHead = document.getElementById("recent-log-head");
+    if (recentHead) {
+        recentHead.innerHTML = "";
+        (sourceOnly ? ["Time (ISO)", "Source (V)"] : ["Time (ISO)", "Battery (V)", "Source (V)", "Buck (V)", "Relay mode"]).forEach((label) => {
+            const th = document.createElement("th"); th.textContent = label; recentHead.appendChild(th);
+        });
     }
-    const fragment = document.createDocumentFragment();
-    rows.forEach((row) => {
+    recentLogBody.innerHTML = "";
+    const previewRows = rows.slice(-8).reverse();
+    previewRows.forEach((row) => {
         const tr = document.createElement("tr");
-        const cells = sourceOnly
+        const values = sourceOnly
             ? [getLogCell(row, headerMap, "time_iso", 0), getLogCell(row, headerMap, "source_voltage", 2)]
-            : [
-                getLogCell(row, headerMap, "time_iso", 0),
-                getLogCell(row, headerMap, "batt_voltage", 1),
-                getLogCell(row, headerMap, "source_voltage", 2),
-                getLogCell(row, headerMap, "buck_voltage", 3),
-                getLogCell(row, headerMap, "relay_mode", 4)
-            ];
-        cells.forEach((value) => {
-            const td = document.createElement("td");
-            td.textContent = value;
-            tr.appendChild(td);
+            : [getLogCell(row, headerMap, "time_iso", 0), getLogCell(row, headerMap, "batt_voltage", 1), getLogCell(row, headerMap, "source_voltage", 2), getLogCell(row, headerMap, "buck_voltage", 3), getLogCell(row, headerMap, "relay_mode", 4)];
+        values.forEach((value) => {
+            const td = document.createElement("td"); td.textContent = value; tr.appendChild(td);
         });
-        fragment.appendChild(tr);
+        recentLogBody.appendChild(tr);
     });
-    logTableBody.appendChild(fragment);
-    if (recentLogBody) {
-        const recentHead = document.getElementById("recent-log-head");
-        const recentSourceOnly = document.body.classList.contains("source-only-mode");
-        if (recentHead) {
-            recentHead.innerHTML = "";
-            (recentSourceOnly ? ["Time (ISO)", "Source (V)"] : ["Time (ISO)", "Battery (V)", "Source (V)", "Buck (V)", "Relay mode"]).forEach((label) => {
-                const th = document.createElement("th"); th.textContent = label; recentHead.appendChild(th);
-            });
-        }
-        recentLogBody.innerHTML = "";
-        const previewRows = rows.slice(-8).reverse();
-        previewRows.forEach((row) => {
-            const tr = document.createElement("tr");
-            const values = recentSourceOnly
-                ? [getLogCell(row, headerMap, "time_iso", 0), getLogCell(row, headerMap, "source_voltage", 2)]
-                : [getLogCell(row, headerMap, "time_iso", 0), getLogCell(row, headerMap, "batt_voltage", 1), getLogCell(row, headerMap, "source_voltage", 2), getLogCell(row, headerMap, "buck_voltage", 3), getLogCell(row, headerMap, "relay_mode", 4)];
-            values.forEach((value) => {
-                const td = document.createElement("td"); td.textContent = value; tr.appendChild(td);
-            });
-            recentLogBody.appendChild(tr);
-        });
-        if (!previewRows.length) recentLogBody.innerHTML = `<tr><td colspan="${recentSourceOnly ? 2 : 5}">No log data yet.</td></tr>`;
-    }
+    if (!previewRows.length) recentLogBody.innerHTML = `<tr><td colspan="${sourceOnly ? 2 : 5}">No log data yet.</td></tr>`;
 }
 
 function renderLogChart(rows) {
@@ -992,7 +965,6 @@ function updateLogChartTooltip(event) {
 }
 
 async function loadLogTable() {
-    if (!logTableBody) return;
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -1012,21 +984,9 @@ async function loadLogTable() {
             logLinesCount.textContent = `${count.toLocaleString()} / 1 000 000 log lines used`;
         }
 
-        const shouldStickToBottom = logTableWrap
-            ? (logTableWrap.scrollHeight - logTableWrap.scrollTop - logTableWrap.clientHeight) < 24
-            : true;
-
-        renderLogTable(rows.slice(-MAX_LOG_TABLE_ROWS), logHeaderCache);
+        renderRecentLogPreview(rows, logHeaderCache);
         logRowsCache = rows;
         renderLogChart(rows);
-
-        if (logTableWrap) {
-            requestAnimationFrame(() => {
-                if (shouldStickToBottom) {
-                    logTableWrap.scrollTop = logTableWrap.scrollHeight;
-                }
-            });
-        }
     } catch (err) {
         if (err.name === 'AbortError') {
             console.log('Log fetch timed out after 10 seconds');
@@ -1034,7 +994,7 @@ async function loadLogTable() {
             console.log('Log fetch error:', err.message);
         }
         // Preserve the last successful log view when the fetch fails.
-        renderLogTable(logRowsCache.slice(-MAX_LOG_TABLE_ROWS), logHeaderCache);
+        renderRecentLogPreview(logRowsCache, logHeaderCache);
         renderLogChart(logRowsCache);
 
         if (logLinesCount) {
@@ -1365,11 +1325,7 @@ if (logChart) {
 }
 if (openSettings) openSettings.addEventListener("click", () => { fillSettingsForm(); openSettingsModal(); });
 if (openLogs) {
-    openLogs.addEventListener("click", () => {
-        openLogsModal();
-        resizeLogChart();
-        loadLogTable();
-    });
+    openLogs.addEventListener("click", openLogsModal);
 }
 document.getElementById("open-logs-card")?.addEventListener("click", openLogsModal);
 if (closeLogs) closeLogs.addEventListener("click", closeLogsModal);
@@ -1382,25 +1338,8 @@ if (toggleSerialMonitorBtn) {
 }
 if (closeSerialMonitor) closeSerialMonitor.addEventListener("click", closeSerialMonitorModal);
 if (serialMonitorBackdrop) serialMonitorBackdrop.addEventListener("click", (e) => { if (e.target === serialMonitorBackdrop) closeSerialMonitorModal(); });
-if (downloadLog) {
-    downloadLog.addEventListener("click", async () => {
-        try {
-            const res = await fetch("data/log.csv", { cache: "no-store" });
-            if (!res.ok) throw new Error("download failed");
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url; a.download = "log.csv";
-            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-        } catch { alert("Unable to download log.csv."); }
-    });
-}
 if (refreshLogBtn) refreshLogBtn.addEventListener("click", () => {
     loadLogTable();
-});
-if (refreshLogModalBtn) refreshLogModalBtn.addEventListener("click", () => {
-    loadLogTable();
-    loadDownloadFiles();
 });
 if (refreshSerialBtn) refreshSerialBtn.addEventListener("click", () => {
     loadSerialMonitor(true);
@@ -1566,6 +1505,7 @@ function closeDocumentModal() {
     documentRequestId += 1;
     documentBackdrop?.classList.remove("open");
     documentBackdrop?.setAttribute("aria-hidden", "true");
+    unlockPageScroll();
 }
 
 function appendMarkdownInline(parent, source) {
@@ -1757,13 +1697,17 @@ function renderMarkdown(source) {
     }
 }
 
-async function openDocumentModal(fileName, title) {
+async function openDocumentModal(fileName, title, intro) {
+    const documentIntro = document.getElementById("document-intro");
     if (!documentBackdrop || !documentTitle || !documentContent) return;
     const requestId = ++documentRequestId;
     documentTitle.textContent = title;
+    if (documentIntro) documentIntro.textContent = intro;
     documentContent.textContent = "Loading document…";
+    if (!documentBackdrop.classList.contains("open")) lockPageScroll();
     documentBackdrop.classList.add("open");
     documentBackdrop.setAttribute("aria-hidden", "false");
+    document.getElementById("close-document")?.focus();
     try {
         const response = await fetch(fileName, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1986,8 +1930,8 @@ document.getElementById("open-update")?.addEventListener("click", async () => {
 });
 document.getElementById("apt-upgrade-cancel")?.addEventListener("click", () => respondToAptUpgrade(false));
 document.getElementById("apt-upgrade-confirm")?.addEventListener("click", () => respondToAptUpgrade(true));
-document.getElementById("open-readme")?.addEventListener("click", () => openDocumentModal("README.md", "README"));
-document.getElementById("open-license")?.addEventListener("click", () => openDocumentModal("LICENSE.txt", "License"));
+document.getElementById("open-readme")?.addEventListener("click", () => openDocumentModal("README.md", "SkyChopper README", "Project setup, features, and troubleshooting."));
+document.getElementById("open-license")?.addEventListener("click", () => openDocumentModal("LICENSE.txt", "SkyChopper Licence", "Project licence and usage terms."));
 document.getElementById("close-document")?.addEventListener("click", closeDocumentModal);
 documentBackdrop?.addEventListener("click", (event) => {
     if (event.target === documentBackdrop) closeDocumentModal();
