@@ -80,7 +80,7 @@ let serialMonitorEntries = [];
 let serialMonitorLatestId = 0;
 let serialMonitorOpenedAt = 0;
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
-const APP_VERSION = "1.3.21";
+const APP_VERSION = "1.3.22";
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const LOG_WINDOW_PAD_MS = 10000;
 const LOG_DISPLAY_LAG_MS = 5000;
@@ -2058,10 +2058,15 @@ function setupCollapsiblePanels() {
 
 function formatUptime(seconds) {
     if (!Number.isFinite(Number(seconds))) return "Unavailable";
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${days}d ${hours}h ${minutes}m`;
+    let remaining = Math.max(0, Math.floor(Number(seconds)));
+    const days = Math.floor(remaining / 86400);
+    remaining %= 86400;
+    const hours = Math.floor(remaining / 3600);
+    remaining %= 3600;
+    const minutes = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    const pad = (value) => String(value).padStart(2, "0");
+    return `${days} day${days === 1 ? "" : "s"}, ${hours}:${pad(minutes)}:${pad(secs)}`;
 }
 
 async function refreshSystemStats() {
@@ -2071,7 +2076,7 @@ async function refreshSystemStats() {
         const data = await response.json();
         const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value ?? "Unavailable"; };
         const bar = (id, percent) => { const el = document.getElementById(id); if (el) el.style.width = `${Math.max(0, Math.min(100, Number(percent) || 0))}%`; };
-        set("system-version", `v${APP_VERSION}`);
+        set("system-version", APP_VERSION);
         set("system-hostname", data.hostname);
         set("system-uptime", formatUptime(data.uptimeSeconds));
         set("system-temp", Number.isFinite(data.temperatureC) ? `${data.temperatureC.toFixed(1)} °C` : "Unavailable");

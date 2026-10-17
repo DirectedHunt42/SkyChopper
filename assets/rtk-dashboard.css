@@ -383,7 +383,7 @@ body.update-open { overflow: hidden; }
 .settings-version { color: var(--dim); font-size: 10px; }
 .source-only-mode .override-group { display: none; }
 .dashboard-footer { margin-top: 40px; padding: 0 0 8px; color: var(--dim); font-size: 11px; text-align: center; }
-.dashboard-footer a { color: var(--blue); }
+.dashboard-footer a { color: var(--blue); text-decoration: none; }
 .dashboard-footer #app-version { color: inherit; margin: 0; }
 
 @media (max-width: 1140px) {
