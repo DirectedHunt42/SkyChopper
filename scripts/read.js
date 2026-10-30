@@ -393,7 +393,10 @@ const HTTP_PORT = Number.parseInt(process.env.PORT || "8000", 10);
 const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER !== "0";
 
 const LOG_INTERVAL_MS = 250;
+// LOG_MAX_LINES includes the CSV header; logLineCount tracks data rows only.
 const LOG_MAX_LINES = 1000000;
+const LOG_MAX_DATA_LINES = LOG_MAX_LINES - 1;
+const LOG_TRIM_BATCH_LINES = 50000;
 const NETWORK_LOG_MAX_LINES = LOG_MAX_LINES;
 const NETWORK_SAMPLE_INTERVAL_MS = 10000;
 let previousCpuTimes = null;
@@ -488,15 +491,24 @@ function ensureLogHeader() {
         return;
     }
 
-    const text = fs.readFileSync(logFile, "utf8");
-    const normalized = text.replace(/\r\n/g, "\n");
-    const lines = normalized.split("\n");
-    const header = (lines[0] || "").trim();
+    let headerText = "";
+    const fd = fs.openSync(logFile, "r");
+    try {
+        const buffer = Buffer.alloc(4096);
+        const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+        headerText = buffer.toString("utf8", 0, bytesRead);
+    } finally {
+        fs.closeSync(fd);
+    }
+    const header = (headerText.split(/\r?\n/, 1)[0] || "").trim();
     const legacyHeader = "time_iso,batt_voltage,source_voltage,buck_voltage";
 
     if (header === LOG_HEADER) return;
 
     if (header === legacyHeader) {
+        const text = fs.readFileSync(logFile, "utf8");
+        const normalized = text.replace(/\r\n/g, "\n");
+        const lines = normalized.split("\n");
         const upgradedLines = lines
             .filter((line, index) => index === 0 || line.length > 0)
             .map((line, index) => {
@@ -889,7 +901,7 @@ function readLastLogRows(limit = 120) {
         const headerText = readFileSegment(fd, 0, Math.min(4096, stat.size));
         header = (headerText.split(/\r?\n/)[0] || LOG_HEADER).split(",");
 
-        while (position > 0 && rows.length <= limit) {
+        while (position > 0 && rows.length < limit) {
             const readSize = Math.min(chunkSize, position);
             position -= readSize;
             const chunk = readFileSegment(fd, position, readSize);
@@ -917,12 +929,12 @@ function readLastLogRows(limit = 120) {
 }
 
 function trimLogIfNeeded() {
-    if (logLineCount <= LOG_MAX_LINES) return;
+    if (logLineCount < LOG_MAX_DATA_LINES) return;
     const text = fs.readFileSync(logFile, "utf8");
     const lines = text.split(/\r?\n/).filter(Boolean);
     const header = lines[0] || LOG_HEADER;
     const dataLines = lines.slice(1);
-    const keep = dataLines.slice(-LOG_MAX_LINES);
+    const keep = dataLines.slice(-(LOG_MAX_DATA_LINES - LOG_TRIM_BATCH_LINES));
     const next = [header, ...keep].join("\n") + "\n";
     fs.writeFileSync(logFile, next);
     logLineCount = keep.length;
@@ -934,6 +946,7 @@ function maybeLog(telemetry) {
     lastLogAt = now;
     ensureDataFolder();
     ensureLogHeader();
+    if (logLineCount >= LOG_MAX_DATA_LINES) trimLogIfNeeded();
     const line = [
         new Date(now).toISOString(),
         Number.isFinite(telemetry.batt_voltage) ? telemetry.batt_voltage.toFixed(3) : "",
@@ -943,7 +956,6 @@ function maybeLog(telemetry) {
     ].join(",") + "\n";
     fs.appendFileSync(logFile, line);
     logLineCount += 1;
-    trimLogIfNeeded();
 }
 
 function writeSourceOnlyStatus(sourceVoltage) {
@@ -958,6 +970,7 @@ function writeSourceOnlyStatus(sourceVoltage) {
 }
 
 countLogLines();
+if (logLineCount > LOG_MAX_DATA_LINES) trimLogIfNeeded();
 loadNetworkLogState();
 
 function loadSettings() {
