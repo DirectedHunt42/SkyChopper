@@ -134,44 +134,37 @@ All endpoints are served from `http://localhost:8000` by default.
 
 ## Home Assistant
 
-SkyChopper can publish its Raspberry Pi system stats as a discovered Home
-Assistant device over MQTT. In Home Assistant, first configure the MQTT
-integration with a broker (for example, the Mosquitto broker add-on). Then,
-on the Pi, edit `/etc/skychopper/mqtt.env` and set the broker URL and credentials:
+### Add SkyChopper as a device
 
-```ini
-MQTT_URL=mqtt://homeassistant.local:1883
-MQTT_USERNAME=your_mqtt_username
-MQTT_PASSWORD=your_mqtt_password
-```
+The SkyChopper Home Assistant integration lets you add the Pi from Home
+Assistant's integration screen and creates a device with its stats sensors.
+It reads the Pi's existing system API directly; MQTT and broker credentials
+are not required.
 
-Use the broker's reachable host name or IP address; use `mqtts://` when the
-broker requires TLS. Keep this file private with
-`sudo chmod 600 /etc/skychopper/mqtt.env`, then restart the service:
+1. Install the integration using either method:
+   - **HACS:** In HACS, open **Integrations → ⋮ → Custom repositories**, add
+     `https://github.com/DirectedHunt42/SkyChopper` as an **Integration**, and
+     install **SkyChopper**. Restart Home Assistant.
+   - **Manual:** Copy `custom_components/skychopper` from this repository into
+     the Home Assistant configuration directory's `custom_components`
+     directory, then restart Home Assistant.
+2. In Home Assistant, go to **Settings → Devices & services → Add integration**
+   and search for **SkyChopper**.
+3. Enter the Pi address, including the API port, for example
+   `http://skychopper.local:8000` or `http://192.168.1.50:8000`.
+   Home Assistant must be able to reach the Pi on port `8000`.
 
-```bash
-sudo systemctl restart skychopper
-```
-
-The setup script installs an optional systemd environment file at that path and
-does not overwrite it on later runs. Once connected, SkyChopper publishes
-retained Home Assistant discovery and stats messages every 30 seconds. The
-device appears under **Settings → Devices & services → MQTT**. Its entities
-include temperature, CPU usage, memory usage and used memory, disk usage,
-uptime, and 1/5/15-minute load averages. MQTT availability marks the device
-offline when the Pi loses its broker connection. If `MQTT_URL` is unset, MQTT
-publishing stays disabled and the existing dashboard/API behavior is unchanged.
-
-For the default Pi hostname installed by `setup.sh` (`skychopper`), the
+The integration creates a SkyChopper device with temperature, CPU, memory,
+disk, uptime, and load average sensors, updating every 30 seconds. Add the
 following [custom:button-card](https://github.com/custom-cards/button-card)
-configuration provides a compact stats panel. Adjust entity IDs if you renamed
-the Pi or Home Assistant assigned different IDs:
+configuration to a dashboard to show the Pi's key stats. Adjust entity IDs if
+you changed them in Home Assistant:
 
 ```yaml
 type: custom:button-card
 entity: sensor.skychopper_temperature
 name: RASPBERRY PI
-icon: mdi:raspberry-pi
+icon: mdi:server-network
 show_state: true
 show_label: false
 custom_fields:
@@ -218,6 +211,35 @@ styles:
       - padding-top: 10px
 ```
 
+### Optional MQTT Discovery
+
+As an alternative, SkyChopper can publish stats through MQTT Discovery. This
+requires an MQTT broker configured in Home Assistant (for example, the
+Mosquitto broker add-on). On the Pi, edit `/etc/skychopper/mqtt.env` and set:
+
+```ini
+MQTT_URL=mqtt://homeassistant.local:1883
+MQTT_USERNAME=your_mqtt_username
+MQTT_PASSWORD=your_mqtt_password
+```
+
+Use the broker's reachable host name or IP address; use `mqtts://` when the
+broker requires TLS. Keep this file private with
+`sudo chmod 600 /etc/skychopper/mqtt.env`, then restart the service:
+
+```bash
+sudo systemctl restart skychopper
+```
+
+The setup script installs an optional systemd environment file at that path and
+does not overwrite it on later runs. Once connected, SkyChopper publishes
+retained Home Assistant discovery and stats messages every 30 seconds. The
+device appears under **Settings → Devices & services → MQTT**. Its entities
+include temperature, CPU usage, memory usage and used memory, disk usage,
+uptime, and 1/5/15-minute load averages. MQTT availability marks the device
+offline when the Pi loses its broker connection. If `MQTT_URL` is unset, MQTT
+publishing stays disabled and the existing dashboard/API behavior is unchanged.
+
 ## Update from the dashboard
 On a Raspberry Pi installed from a Git checkout, choose **Update** in the
 dashboard and confirm. The updater resets tracked local changes, pulls the
@@ -244,6 +266,9 @@ package upgrades; declining or not answering within five minutes skips them.
 - `assets/favicon.svg`: Dashboard favicon.
 - `scripts/write.js`: Front-end rendering, settings, and UI logic.
 - `scripts/read.js`: Telemetry reader, simulator fallback, API server.
+- `custom_components/skychopper/`: Home Assistant integration for adding the
+  Pi as a device from the Integrations screen.
+- `hacs.json`: HACS metadata for installing the custom integration.
 - Network status uses the Linux `iw` utility for Wi-Fi signal and link details. The backend checks for active non-internal IPv4 interfaces every 10 seconds and records detected disconnect/reconnect times and outage durations.
 - `data/settings.json`: User-configurable thresholds.
 - `data/status.json`: Live status payload consumed by the UI.

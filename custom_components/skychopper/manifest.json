@@ -1,0 +1,11 @@
+{
+  "domain": "skychopper",
+  "name": "SkyChopper",
+  "config_flow": true,
+  "codeowners": ["@DirectedHunt42"],
+  "documentation": "https://github.com/DirectedHunt42/SkyChopper#home-assistant",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/DirectedHunt42/SkyChopper/issues",
+  "version": "1.4.0"
+}

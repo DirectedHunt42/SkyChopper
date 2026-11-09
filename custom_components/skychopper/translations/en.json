@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to SkyChopper",
+        "description": "Enter the Raspberry Pi address, including the API port (default 8000).",
+        "data": {
+          "url": "SkyChopper URL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to SkyChopper. Check the address and make sure the Pi is online.",
+      "invalid_url": "Enter a valid HTTP or HTTPS address without a path.",
+      "invalid_response": "The address did not return valid SkyChopper system statistics."
+    },
+    "abort": {
+      "already_configured": "This SkyChopper device is already configured."
+    }
+  }
+}
