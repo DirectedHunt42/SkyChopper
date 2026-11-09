@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.4.0**
+**Version: 1.4.1**
 
 ## Overview
 
@@ -157,58 +157,150 @@ are not required.
 The integration creates a SkyChopper device with temperature, CPU, memory,
 disk, uptime, and load average sensors, updating every 30 seconds. Add the
 following [custom:button-card](https://github.com/custom-cards/button-card)
-configuration to a dashboard to show the Pi's key stats. Adjust entity IDs if
-you changed them in Home Assistant:
+configuration to a dashboard for a compact stats panel. In the card editor,
+select your SkyChopper temperature sensor as the entity. The card derives the
+other sensor IDs from that entity, so it works with different Home Assistant
+entity prefixes as long as the sensor suffixes are unchanged.
 
 ```yaml
 type: custom:button-card
 entity: sensor.skychopper_temperature
-name: RASPBERRY PI
+name: SKYCHOPPER
 icon: mdi:server-network
 show_state: true
-show_label: false
-custom_fields:
-  stats: |
-    [[[
-      const read = id => {
-        const sensor = states[id];
-        if (!sensor || ['unknown', 'unavailable'].includes(sensor.state)) {
-          return 'Unavailable';
-        }
-        const unit = sensor.attributes.unit_of_measurement || '';
-        return `${sensor.state}${unit ? ` ${unit}` : ''}`;
-      };
+show_label: true
+label: |
+  [[[
+    const base = entity.entity_id.replace(/^sensor\./, '').replace(/_temperature$/, '');
+    const cpu = states[`sensor.${base}_cpu_usage`];
+    const memory = states[`sensor.${base}_memory_usage`];
+    const available = sensor =>
+      sensor && !['unknown', 'unavailable'].includes(sensor.state);
 
-      return `
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; width:100%;">
-          <span>CPU</span><strong>${read('sensor.skychopper_cpu_usage')}</strong>
-          <span>Memory</span><strong>${read('sensor.skychopper_memory_usage')}</strong>
-          <span>Disk</span><strong>${read('sensor.skychopper_disk_usage')}</strong>
-          <span>Load (1m)</span><strong>${read('sensor.skychopper_load_average_1m')}</strong>
-        </div>
-      `;
-    ]]]
+    if (!available(cpu) || !available(memory)) {
+      return 'System stats unavailable';
+    }
+
+    return `CPU ${cpu.state}% · Memory ${memory.state}%`;
+  ]]]
 styles:
   card:
-    - padding: 10px
+    - padding: 12px
   grid:
-    - grid-template-areas: '"i n" "i s" "stats stats"'
+    - grid-template-areas: '"i n" "i s" "i l" "progress progress" "details details"'
     - grid-template-columns: 45px 1fr
-    - grid-template-rows: min-content min-content min-content
+    - grid-template-rows: min-content min-content min-content min-content min-content
   icon:
     - width: 32px
+    - color: '#2196F3'
   name:
     - font-size: 15px
     - font-weight: bold
     - justify-self: start
   state:
-    - font-size: 12px
+    - font-size: 16px
+    - font-weight: bold
+    - justify-self: start
+  label:
+    - font-size: 10px
     - justify-self: start
   custom_fields:
-    stats:
-      - grid-area: stats
+    progress:
+      - grid-area: progress
       - width: 100%
-      - padding-top: 10px
+      - padding-top: 12px
+    details:
+      - grid-area: details
+      - width: 100%
+      - padding-top: 12px
+custom_fields:
+  progress: |
+    [[[
+      const base = entity.entity_id.replace(/^sensor\./, '').replace(/_temperature$/, '');
+      const sensor = states[`sensor.${base}_cpu_usage`];
+      const raw = sensor?.state;
+      const valid = raw !== undefined
+        && !['unknown', 'unavailable', ''].includes(raw)
+        && Number.isFinite(Number(raw));
+      const value = valid ? Math.max(0, Math.min(100, Number(raw))) : 0;
+      const color = valid ? '#2196F3' : 'var(--secondary-text-color)';
+
+      return `
+        <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
+          <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:bold;">
+            <span>CPU Usage</span>
+            <span style="color:${color};">${valid ? `${value.toFixed(1)}%` : 'Unavailable'}</span>
+          </div>
+          <div style="width:100%; height:8px; background:var(--secondary-background-color); border-radius:10px; overflow:hidden;">
+            <div style="width:${value}%; height:100%; background:${color}; border-radius:10px;"></div>
+          </div>
+        </div>
+      `;
+    ]]]
+  details: |
+    [[[
+      const base = entity.entity_id.replace(/^sensor\./, '').replace(/_temperature$/, '');
+      const get = name => states[`sensor.${base}_${name}`];
+
+      const read = name => {
+        const sensor = get(name);
+        if (!sensor || ['unknown', 'unavailable', ''].includes(sensor.state)) return '—';
+        const unit = sensor.attributes.unit_of_measurement || '';
+        return `${sensor.state}${unit ? ` ${unit}` : ''}`;
+      };
+
+      const memoryUsed = () => {
+        const sensor = get('memory_used');
+        if (!sensor || !Number.isFinite(Number(sensor.state))) return '—';
+        let size = Number(sensor.state);
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let index = 0;
+        while (size >= 1024 && index < units.length - 1) {
+          size /= 1024;
+          index++;
+        }
+        return `${size.toFixed(index ? 1 : 0)} ${units[index]}`;
+      };
+
+      const uptime = () => {
+        const sensor = get('uptime');
+        if (!sensor || !Number.isFinite(Number(sensor.state))) return '—';
+        let seconds = Math.max(0, Math.floor(Number(sensor.state)));
+        const days = Math.floor(seconds / 86400);
+        seconds %= 86400;
+        const hours = Math.floor(seconds / 3600);
+        seconds %= 3600;
+        const minutes = Math.floor(seconds / 60);
+        return `${days}d ${hours}h ${minutes}m`;
+      };
+
+      const safe = value => String(value).replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;',
+        '"': '&quot;', "'": '&#39;'
+      })[character]);
+
+      const row = (label, value) => `
+        <div style="display:flex; flex-direction:column; gap:3px; min-width:0;">
+          <span style="font-size:10px; color:var(--secondary-text-color);">${label}</span>
+          <span style="font-size:12px; font-weight:500; overflow-wrap:anywhere;">${safe(value)}</span>
+        </div>
+      `;
+
+      return `
+        <div style="width:100%; border-top:1px solid var(--divider-color); padding-top:12px; display:flex; flex-direction:column; gap:12px;">
+          <div style="font-size:12px; font-weight:bold;">SYSTEM DETAILS</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            ${row('Memory Usage', read('memory_usage'))}
+            ${row('Memory Used', memoryUsed())}
+            ${row('Disk Usage', read('disk_usage'))}
+            ${row('Uptime', uptime())}
+            ${row('Load Average (1m)', read('load_average_1m'))}
+            ${row('Load Average (5m)', read('load_average_5m'))}
+            ${row('Load Average (15m)', read('load_average_15m'))}
+          </div>
+        </div>
+      `;
+    ]]]
 ```
 
 ### Optional MQTT Discovery
