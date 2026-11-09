@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.3.24**
+**Version: 1.4.0**
 
 ## Overview
 
@@ -27,6 +27,8 @@ computes power decisions, logs CSV data, and serves a lightweight API.
 - Repository File Tree panel with tracked files and installed/generated file mappings.
 - Serial bridge with auto-reconnect and simulator fallback.
 - Power override (BATT/AUTO/SOURCE) switch synced to settings.
+- Optional Home Assistant MQTT Discovery for Raspberry Pi temperature, CPU,
+  memory, disk, uptime, and load sensors.
 
 ## Quick Start (Arduino + Raspberry Pi)
 1. Flash the Arduino with the telemetry sketch and connect it to the Pi over USB serial.
@@ -77,6 +79,11 @@ node scripts/read.js
 - `SERIAL_BAUD`: Serial baud rate. Default `115200`.
 - `PORT`: API server port. Default `8000`.
 - `ENABLE_API_SERVER`: Set to `0` to disable the API server.
+- `MQTT_URL`: Optional MQTT broker URL (`mqtt://`, `mqtts://`, `ws://`, or `wss://`). Setting it enables Home Assistant Discovery.
+- `MQTT_USERNAME` / `MQTT_PASSWORD`: Optional broker credentials.
+- `MQTT_BASE_TOPIC`: MQTT state and availability topic prefix. Default: `skychopper`.
+- `MQTT_DISCOVERY_PREFIX`: Home Assistant discovery topic prefix. Default: `homeassistant`.
+- `MQTT_PUBLISH_INTERVAL_MS`: Stats publish interval in milliseconds. Default: `30000` (minimum: `1000`).
 
 ## Settings
 The settings modal edits battery thresholds and writes JSON to `data/settings.json` using the local API server on port `8000` (configurable by `PORT`). The API server is enabled by default.
@@ -123,6 +130,93 @@ All endpoints are served from `http://localhost:8000` by default.
 - `GET /api/files/:id`: Download one of the listed logs or configuration files. Service and Nginx logs are limited to their latest 1,000 lines.
 - `GET /api/repo-files`: List repository files and report installed/generated file mappings.
 - `GET /api/update` and `POST /api/update`: Read update progress and start the installed updater.
+- `GET /api/system`: Read system temperature, CPU, memory, uptime, load average, and disk usage.
+
+## Home Assistant
+
+SkyChopper can publish its Raspberry Pi system stats as a discovered Home
+Assistant device over MQTT. In Home Assistant, first configure the MQTT
+integration with a broker (for example, the Mosquitto broker add-on). Then,
+on the Pi, edit `/etc/skychopper/mqtt.env` and set the broker URL and credentials:
+
+```ini
+MQTT_URL=mqtt://homeassistant.local:1883
+MQTT_USERNAME=your_mqtt_username
+MQTT_PASSWORD=your_mqtt_password
+```
+
+Use the broker's reachable host name or IP address; use `mqtts://` when the
+broker requires TLS. Keep this file private with
+`sudo chmod 600 /etc/skychopper/mqtt.env`, then restart the service:
+
+```bash
+sudo systemctl restart skychopper
+```
+
+The setup script installs an optional systemd environment file at that path and
+does not overwrite it on later runs. Once connected, SkyChopper publishes
+retained Home Assistant discovery and stats messages every 30 seconds. The
+device appears under **Settings → Devices & services → MQTT**. Its entities
+include temperature, CPU usage, memory usage and used memory, disk usage,
+uptime, and 1/5/15-minute load averages. MQTT availability marks the device
+offline when the Pi loses its broker connection. If `MQTT_URL` is unset, MQTT
+publishing stays disabled and the existing dashboard/API behavior is unchanged.
+
+For the default Pi hostname installed by `setup.sh` (`skychopper`), the
+following [custom:button-card](https://github.com/custom-cards/button-card)
+configuration provides a compact stats panel. Adjust entity IDs if you renamed
+the Pi or Home Assistant assigned different IDs:
+
+```yaml
+type: custom:button-card
+entity: sensor.skychopper_temperature
+name: RASPBERRY PI
+icon: mdi:raspberry-pi
+show_state: true
+show_label: false
+custom_fields:
+  stats: |
+    [[[
+      const read = id => {
+        const sensor = states[id];
+        if (!sensor || ['unknown', 'unavailable'].includes(sensor.state)) {
+          return 'Unavailable';
+        }
+        const unit = sensor.attributes.unit_of_measurement || '';
+        return `${sensor.state}${unit ? ` ${unit}` : ''}`;
+      };
+
+      return `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; width:100%;">
+          <span>CPU</span><strong>${read('sensor.skychopper_cpu_usage')}</strong>
+          <span>Memory</span><strong>${read('sensor.skychopper_memory_usage')}</strong>
+          <span>Disk</span><strong>${read('sensor.skychopper_disk_usage')}</strong>
+          <span>Load (1m)</span><strong>${read('sensor.skychopper_load_average_1m')}</strong>
+        </div>
+      `;
+    ]]]
+styles:
+  card:
+    - padding: 10px
+  grid:
+    - grid-template-areas: '"i n" "i s" "stats stats"'
+    - grid-template-columns: 45px 1fr
+    - grid-template-rows: min-content min-content min-content
+  icon:
+    - width: 32px
+  name:
+    - font-size: 15px
+    - font-weight: bold
+    - justify-self: start
+  state:
+    - font-size: 12px
+    - justify-self: start
+  custom_fields:
+    stats:
+      - grid-area: stats
+      - width: 100%
+      - padding-top: 10px
+```
 
 ## Update from the dashboard
 On a Raspberry Pi installed from a Git checkout, choose **Update** in the

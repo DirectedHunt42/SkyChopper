@@ -8,6 +8,7 @@ NGINX_SITE="/etc/nginx/sites-available/${SERVICE_NAME}"
 NGINX_SITE_LINK="/etc/nginx/sites-enabled/${SERVICE_NAME}"
 UPDATE_COMMAND="/usr/local/sbin/skychopper-update"
 UPDATE_REPO_FILE="/etc/skychopper-update-repo"
+MQTT_ENV_FILE="/etc/skychopper/mqtt.env"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Please run with sudo: sudo ./setup.sh"
@@ -77,6 +78,21 @@ else
   sed -i "s/127.0.1.1.*/127.0.1.1\tskychopper/g" /etc/hosts || true
 fi
 
+mkdir -p /etc/skychopper
+if [[ ! -f "${MQTT_ENV_FILE}" ]]; then
+  cat > "${MQTT_ENV_FILE}" <<'EOF'
+# Optional Home Assistant MQTT Discovery settings.
+# Uncomment and adjust these values, then restart the service:
+# MQTT_URL=mqtt://homeassistant.local:1883
+# MQTT_USERNAME=your_mqtt_username
+# MQTT_PASSWORD=your_mqtt_password
+# MQTT_BASE_TOPIC=skychopper
+# MQTT_DISCOVERY_PREFIX=homeassistant
+# MQTT_PUBLISH_INTERVAL_MS=30000
+EOF
+  chmod 0600 "${MQTT_ENV_FILE}"
+fi
+
 echo "Configuring systemd service..."
 cat > "${NODE_SERVICE_FILE}" <<EOF
 [Unit]
@@ -92,6 +108,7 @@ RestartSec=2
 Environment=ENABLE_API_SERVER=1
 Environment=SERIAL_PORT=/dev/serial0
 Environment=SERIAL_BAUD=115200
+EnvironmentFile=-${MQTT_ENV_FILE}
 
 [Install]
 WantedBy=multi-user.target

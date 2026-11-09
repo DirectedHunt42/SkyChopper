@@ -25,6 +25,9 @@ What it does
 - Serves index.html on port 80 (http://<pi-ip>/).
 - Sets the hostname to skychopper (http://skychopper.local/).
 - Creates a systemd service to run scripts/read.js at boot.
+- Installs an optional MQTT environment file at `/etc/skychopper/mqtt.env` for
+  Home Assistant device discovery. Add MQTT broker settings there and restart
+  the service to publish Pi temperature and resource sensors.
 - Installs the dashboard updater used by the Update button. It resets tracked
   local changes, pulls the latest Git version, reruns setup.sh, refreshes APT
   package lists, and asks before installing available system package upgrades.
@@ -47,6 +50,10 @@ Access the dashboard:
 
 Troubleshooting
 ---------------
+- To enable Home Assistant MQTT discovery, configure `/etc/skychopper/mqtt.env`
+  and restart the service:
+    sudo nano /etc/skychopper/mqtt.env
+    sudo systemctl restart skychopper
 - If skychopper.local does not resolve, ensure avahi-daemon is running:
     sudo systemctl status avahi-daemon
 - If the API doesn't respond, check the service logs:

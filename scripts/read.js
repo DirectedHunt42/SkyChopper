@@ -4,6 +4,7 @@ const http = require("http");
 const os = require("os");
 const readline = require("readline");
 const { execFile } = require("child_process");
+const mqtt = require("mqtt");
 
 const READER_LOG_MAX_ENTRIES = 300;
 const readerLogEntries = [];
@@ -303,6 +304,18 @@ async function getSystemStats() {
     };
 }
 
+const HOME_ASSISTANT_SENSORS = [
+    { id: "temperature", name: "Temperature", valueTemplate: "{{ value_json.temperatureC if value_json.temperatureC is not none else 'unknown' }}", deviceClass: "temperature", stateClass: "measurement", unit: "°C", icon: "mdi:thermometer" },
+    { id: "cpu_usage", name: "CPU Usage", valueTemplate: "{{ value_json.cpuUsagePercent if value_json.cpuUsagePercent is not none else 'unknown' }}", stateClass: "measurement", unit: "%", icon: "mdi:cpu-64-bit" },
+    { id: "memory_usage", name: "Memory Usage", valueTemplate: "{{ value_json.memory.usedPercent }}", stateClass: "measurement", unit: "%", icon: "mdi:memory" },
+    { id: "memory_used", name: "Memory Used", valueTemplate: "{{ value_json.memory.usedBytes }}", deviceClass: "data_size", stateClass: "measurement", unit: "B", icon: "mdi:memory" },
+    { id: "disk_usage", name: "Disk Usage", valueTemplate: "{{ value_json.disk.usedPercent if value_json.disk.usedPercent is not none else 'unknown' }}", stateClass: "measurement", unit: "%", icon: "mdi:harddisk" },
+    { id: "uptime", name: "Uptime", valueTemplate: "{{ value_json.uptimeSeconds }}", deviceClass: "duration", stateClass: "measurement", unit: "s", icon: "mdi:timer-outline" },
+    { id: "load_average_1m", name: "Load Average (1m)", valueTemplate: "{{ value_json.loadAverage[0] }}", stateClass: "measurement", icon: "mdi:gauge" },
+    { id: "load_average_5m", name: "Load Average (5m)", valueTemplate: "{{ value_json.loadAverage[1] }}", stateClass: "measurement", icon: "mdi:gauge" },
+    { id: "load_average_15m", name: "Load Average (15m)", valueTemplate: "{{ value_json.loadAverage[2] }}", stateClass: "measurement", icon: "mdi:gauge" }
+];
+
 function getDeviceStats() {
     let serialDevices = [];
     if (process.platform === "linux") {
@@ -391,6 +404,12 @@ const SERIAL_PORT = process.env.SERIAL_PORT || "";
 const SERIAL_BAUD = Number.parseInt(process.env.SERIAL_BAUD || "115200", 10);
 const HTTP_PORT = Number.parseInt(process.env.PORT || "8000", 10);
 const ENABLE_API_SERVER = process.env.ENABLE_API_SERVER !== "0";
+const MQTT_URL = (process.env.MQTT_URL || "").trim();
+const MQTT_USERNAME = process.env.MQTT_USERNAME || "";
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || "";
+const MQTT_BASE_TOPIC = (process.env.MQTT_BASE_TOPIC || "skychopper").replace(/^\/+|\/+$/g, "");
+const MQTT_DISCOVERY_PREFIX = (process.env.MQTT_DISCOVERY_PREFIX || "homeassistant").replace(/^\/+|\/+$/g, "");
+const MQTT_PUBLISH_INTERVAL_MS = Number.parseInt(process.env.MQTT_PUBLISH_INTERVAL_MS || "30000", 10);
 
 const LOG_INTERVAL_MS = 250;
 // LOG_MAX_LINES includes the CSV header; logLineCount tracks data rows only.
@@ -1629,5 +1648,114 @@ if (ENABLE_API_SERVER) {
         }
     });
 }
+
+function startHomeAssistantMqtt() {
+    if (!MQTT_URL) return;
+
+    let brokerUrl;
+    try {
+        brokerUrl = new URL(MQTT_URL);
+        if (!["mqtt:", "mqtts:", "ws:", "wss:"].includes(brokerUrl.protocol)) {
+            throw new Error("MQTT_URL must use mqtt://, mqtts://, ws://, or wss://");
+        }
+    } catch (error) {
+        console.error("Home Assistant MQTT is disabled because MQTT_URL is invalid:", error.message);
+        return;
+    }
+
+    if (!MQTT_BASE_TOPIC || !MQTT_DISCOVERY_PREFIX
+        || /[+#]/.test(MQTT_BASE_TOPIC) || /[+#]/.test(MQTT_DISCOVERY_PREFIX)
+        || !Number.isFinite(MQTT_PUBLISH_INTERVAL_MS) || MQTT_PUBLISH_INTERVAL_MS < 1000) {
+        console.error("Home Assistant MQTT is disabled because MQTT topic settings or publish interval are invalid.");
+        return;
+    }
+
+    const hostname = os.hostname();
+    const entityPrefix = hostname.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    const deviceId = `skychopper_${entityPrefix}`;
+    const deviceName = `SkyChopper (${hostname})`;
+    const stateTopic = `${MQTT_BASE_TOPIC}/${deviceId}/state`;
+    const availabilityTopic = `${MQTT_BASE_TOPIC}/${deviceId}/availability`;
+    const clientId = `skychopper_${deviceId}`.slice(0, 23);
+    const client = mqtt.connect(MQTT_URL, {
+        clientId,
+        username: MQTT_USERNAME || undefined,
+        password: MQTT_PASSWORD || undefined,
+        reconnectPeriod: 5000,
+        connectTimeout: 30000,
+        will: { topic: availabilityTopic, payload: "offline", qos: 1, retain: true }
+    });
+    let statsTimer = null;
+    let statsInFlight = false;
+
+    const publish = (topic, message, retain = true) => {
+        client.publish(topic, message, { qos: 1, retain }, (error) => {
+            if (error) console.error(`Unable to publish Home Assistant MQTT topic ${topic}:`, error.message);
+        });
+    };
+
+    const publishStats = async () => {
+        if (!client.connected || statsInFlight) return;
+        statsInFlight = true;
+        try {
+            const stats = await getSystemStats();
+            publish(stateTopic, JSON.stringify(stats));
+        } catch (error) {
+            console.error("Unable to publish Raspberry Pi stats to Home Assistant:", error);
+        } finally {
+            statsInFlight = false;
+        }
+    };
+
+    client.on("connect", () => {
+        console.log(`Connected to the Home Assistant MQTT broker at ${brokerUrl.host}`);
+        publish(availabilityTopic, "online");
+        for (const sensor of HOME_ASSISTANT_SENSORS) {
+            const config = {
+                name: sensor.name,
+                unique_id: `${deviceId}_${sensor.id}`,
+                default_entity_id: `sensor.${entityPrefix}_${sensor.id}`,
+                state_topic: stateTopic,
+                value_template: sensor.valueTemplate,
+                availability_topic: availabilityTopic,
+                payload_available: "online",
+                payload_not_available: "offline",
+                device: {
+                    identifiers: [deviceId],
+                    name: deviceName,
+                    manufacturer: "Raspberry Pi",
+                    model: "Raspberry Pi"
+                },
+                icon: sensor.icon
+            };
+            if (sensor.deviceClass) config.device_class = sensor.deviceClass;
+            if (sensor.stateClass) config.state_class = sensor.stateClass;
+            if (sensor.unit) config.unit_of_measurement = sensor.unit;
+            publish(`${MQTT_DISCOVERY_PREFIX}/sensor/${deviceId}/${sensor.id}/config`, JSON.stringify(config));
+        }
+
+        publishStats();
+        if (statsTimer) clearInterval(statsTimer);
+        statsTimer = setInterval(publishStats, MQTT_PUBLISH_INTERVAL_MS);
+    });
+
+    client.on("error", (error) => {
+        console.error("Home Assistant MQTT connection error:", error.message);
+    });
+
+    const shutdown = () => {
+        if (statsTimer) clearInterval(statsTimer);
+        const finish = () => client.end(true, {}, () => process.exit(0));
+        if (client.connected) {
+            client.publish(availabilityTopic, "offline", { qos: 1, retain: true }, finish);
+        } else {
+            finish();
+        }
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+}
+
+startHomeAssistantMqtt();
 
 console.log("✅ Full updated read.js is now running - status.json should update every second.");
