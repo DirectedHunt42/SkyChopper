@@ -6,7 +6,7 @@
 
 <p align="center">A Raspberry Pi wind turbine telemetry dashboard with live power monitoring, Arduino serial input, and system controls.</p>
 
-**Version: 1.4.1**
+**Version: 1.4.2**
 
 ## Overview
 
